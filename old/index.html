@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI智能讲解PPT - 历史版本</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 20px;
+    }
+    h1 {
+      font-size: 2em;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    .subtitle { color: #888; margin-bottom: 40px; }
+    .version-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 500px;
+    }
+    .version-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #1a1a2e;
+      border: 1px solid #2a2a3e;
+      border-radius: 12px;
+      padding: 20px 24px;
+      text-decoration: none;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .version-card:hover {
+      transform: translateY(-3px);
+      border-color: #667eea;
+    }
+    .version-info { display: flex; flex-direction: column; gap: 4px; }
+    .version-name { color: #e0e0e0; font-weight: 600; font-size: 1.1em; }
+    .version-desc { color: #888; font-size: 0.85em; }
+    .version-arrow { color: #667eea; font-size: 1.5em; }
+    .back-link {
+      margin-top: 40px;
+      color: #667eea;
+      text-decoration: none;
+      font-size: 0.95em;
+    }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>历史版本</h1>
+  <p class="subtitle">选择要查看的版本</p>
+  <div class="version-list">
+    <a href="/old/v1/" class="version-card">
+      <div class="version-info">
+        <span class="version-name">v1.0 - 基础版</span>
+        <span class="version-desc">基础PPT讲解功能，固定数字人和语音</span>
+      </div>
+      <span class="version-arrow">→</span>
+    </a>
+  </div>
+  <a href="/" class="back-link">← 返回最新版本</a>
+</body>
+</html>

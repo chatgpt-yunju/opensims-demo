@@ -18,24 +18,48 @@ fs.mkdirSync(OUTPUT_DIR, { recursive: true })
 // In-memory project store
 const projects = new Map()
 
-// Daily upload limit tracking (IP -> { date: 'YYYY-MM-DD', count: N })
-const uploadLimits = new Map()
-const DAILY_LIMIT = 3
+// Available TTS voices
+const VOICES = [
+  { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', gender: 'female', desc: '温柔女声' },
+  { id: 'zh-CN-XiaoyiNeural', name: '晓伊', gender: 'female', desc: '活泼女声' },
+  { id: 'zh-CN-YunjianNeural', name: '云健', gender: 'male', desc: '沉稳男声' },
+  { id: 'zh-CN-YunxiNeural', name: '云希', gender: 'male', desc: '温暖男声' },
+  { id: 'zh-CN-YunyangNeural', name: '云扬', gender: 'male', desc: '专业男声' },
+  { id: 'zh-CN-YunxiaNeural', name: '云夏', gender: 'male', desc: '少年音' }
+]
 
-function checkDailyLimit(ip) {
+// Avatar presets
+const AVATARS = [
+  { id: 'default', name: 'AI 讲师', hair: '#2c2c3a', skin: '#f5d6b8', suit: '#667eea' },
+  { id: 'professional', name: '商务精英', hair: '#1a1a2a', skin: '#f0c8a0', suit: '#2c3e50' },
+  { id: 'creative', name: '创意达人', hair: '#8e44ad', skin: '#fde3cf', suit: '#e74c3c' },
+  { id: 'tech', name: '科技先锋', hair: '#2c3e50', skin: '#f5d6b8', suit: '#00b894' },
+  { id: 'warm', name: '温暖导师', hair: '#6b4226', skin: '#f8d5b4', suit: '#fd9644' },
+  { id: 'elegant', name: '优雅女士', hair: '#4a2c2a', skin: '#fce4d6', suit: '#e056a0' }
+]
+
+// Daily upload limit tracking (deviceId -> { date: 'YYYY-MM-DD', count: N })
+const uploadLimits = new Map()
+const DAILY_LIMIT = 5
+
+function getDeviceKey(req) {
+  return req.headers['x-device-id'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+}
+
+function checkDailyLimit(key) {
   const today = new Date().toISOString().slice(0, 10)
-  const record = uploadLimits.get(ip)
+  const record = uploadLimits.get(key)
   if (!record || record.date !== today) {
     return { allowed: true, remaining: DAILY_LIMIT }
   }
   return { allowed: record.count < DAILY_LIMIT, remaining: DAILY_LIMIT - record.count }
 }
 
-function recordUpload(ip) {
+function recordUpload(key) {
   const today = new Date().toISOString().slice(0, 10)
-  const record = uploadLimits.get(ip)
+  const record = uploadLimits.get(key)
   if (!record || record.date !== today) {
-    uploadLimits.set(ip, { date: today, count: 1 })
+    uploadLimits.set(key, { date: today, count: 1 })
   } else {
     record.count++
   }
@@ -59,19 +83,50 @@ const upload = multer({
   }
 })
 
+// Avatar photo upload
+const AVATAR_PHOTO_DIR = path.join(__dirname, '../../uploads/avatars')
+fs.mkdirSync(AVATAR_PHOTO_DIR, { recursive: true })
+
+const photoStorage = multer.diskStorage({
+  destination: AVATAR_PHOTO_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase()
+    cb(null, uuid() + ext)
+  }
+})
+const uploadPhoto = multer({
+  storage: photoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp']
+    const ext = path.extname(file.originalname).toLowerCase()
+    cb(null, allowed.includes(ext))
+  }
+})
+
 // ============ API Routes ============
+
+// Get available voices
+router.get('/voices', (req, res) => {
+  res.json(VOICES)
+})
+
+// Get available avatars
+router.get('/avatars', (req, res) => {
+  res.json(AVATARS)
+})
 
 // Check remaining uploads
 router.get('/limit', (req, res) => {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
-  const { remaining } = checkDailyLimit(ip)
+  const key = getDeviceKey(req)
+  const { remaining } = checkDailyLimit(key)
   res.json({ remaining, limit: DAILY_LIMIT })
 })
 
 // Upload PPT/PDF
 router.post('/upload', upload.single('file'), async (req, res) => {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
-  const { allowed, remaining } = checkDailyLimit(ip)
+  const key = getDeviceKey(req)
+  const { allowed, remaining } = checkDailyLimit(key)
   if (!allowed) {
     // Clean up uploaded file
     if (req.file) fs.unlinkSync(req.file.path)
@@ -95,12 +150,13 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     progress: 5,
     slides: [],
     texts: [],
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    deviceId: key
   }
   projects.set(id, project)
-  recordUpload(ip)
+  recordUpload(key)
 
-  const afterLimit = checkDailyLimit(ip)
+  const afterLimit = checkDailyLimit(key)
   res.json({ id, remaining: afterLimit.remaining })
 
   // Process async
@@ -127,9 +183,10 @@ router.get('/:id/slides', (req, res) => {
 
 // List projects
 router.get('/list', (req, res) => {
+  const key = getDeviceKey(req)
   const list = []
   for (const [id, p] of projects) {
-    if (p.status === 'done') {
+    if (p.status === 'done' && p.deviceId === key) {
       list.push({
         id,
         filename: p.filename,
@@ -166,6 +223,88 @@ PPT文字内容：${slideText}
   } catch (err) {
     res.status(500).json({ answer: '回答失败，请重试。' })
   }
+})
+
+// Save edited script for a slide
+router.put('/:id/slides/:index/script', express.json(), async (req, res) => {
+  const p = projects.get(req.params.id)
+  if (!p) return res.status(404).json({ error: '项目不存在' })
+
+  const index = parseInt(req.params.index)
+  if (isNaN(index) || index < 0 || index >= p.slides.length) {
+    return res.status(400).json({ error: '无效的页码' })
+  }
+
+  const { script } = req.body
+  if (typeof script !== 'string') {
+    return res.status(400).json({ error: '讲稿内容无效' })
+  }
+
+  p.slides[index].script = script
+
+  // Regenerate audio for this slide
+  try {
+    const audioFile = path.join(p.dir, `audio_${index}.mp3`)
+    const voice = p.voice || 'zh-CN-XiaoxiaoNeural'
+    await textToSpeech(script, audioFile, voice)
+    res.json({ success: true, audio: `/output/${p.id}/audio_${index}.mp3?t=${Date.now()}` })
+  } catch (err) {
+    res.json({ success: true, audio: p.slides[index].audio })
+  }
+})
+
+// Change voice for entire project and regenerate all audio
+router.put('/:id/voice', express.json(), async (req, res) => {
+  const p = projects.get(req.params.id)
+  if (!p) return res.status(404).json({ error: '项目不存在' })
+
+  const { voice } = req.body
+  if (!VOICES.find(v => v.id === voice)) {
+    return res.status(400).json({ error: '不支持的音色' })
+  }
+
+  p.voice = voice
+  p.voiceStatus = 'generating'
+  res.json({ success: true, message: '正在重新生成语音...' })
+
+  // Regenerate all audio in background
+  try {
+    for (let i = 0; i < p.slides.length; i++) {
+      const audioFile = path.join(p.dir, `audio_${i}.mp3`)
+      await textToSpeech(p.slides[i].script, audioFile, voice)
+      p.slides[i].audio = `/output/${p.id}/audio_${i}.mp3?t=${Date.now()}`
+    }
+    p.voiceStatus = 'done'
+  } catch (err) {
+    console.error('[Voice Change Error]', err.message)
+    p.voiceStatus = 'error'
+  }
+})
+
+// Get voice regeneration status
+router.get('/:id/voice-status', (req, res) => {
+  const p = projects.get(req.params.id)
+  if (!p) return res.status(404).json({ error: '项目不存在' })
+  res.json({ status: p.voiceStatus || 'done', voice: p.voice || 'zh-CN-XiaoxiaoNeural' })
+})
+
+// Upload avatar photo (global, not project-specific)
+router.post('/avatar-photo', uploadPhoto.single('photo'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '请上传图片文件（jpg/png/webp，最大5MB）' })
+  res.json({ url: `/uploads/avatars/${req.file.filename}` })
+})
+
+// Update avatar for project
+router.put('/:id/avatar', express.json(), (req, res) => {
+  const p = projects.get(req.params.id)
+  if (!p) return res.status(404).json({ error: '项目不存在' })
+
+  const { avatarId } = req.body
+  const avatar = AVATARS.find(a => a.id === avatarId)
+  if (!avatar) return res.status(400).json({ error: '不支持的数字人' })
+
+  p.avatar = avatarId
+  res.json({ success: true, avatar })
 })
 
 // ============ Processing Pipeline ============
@@ -243,9 +382,12 @@ function pdfToImages(pdfPath, outputDir) {
   return new Promise((resolve, reject) => {
     const prefix = path.join(outputDir, 'slide')
     const cmd = `pdftoppm -png -r 200 "${pdfPath}" "${prefix}"`
-    exec(cmd, { timeout: 120000 }, (err) => {
-      if (err) return reject(new Error('PDF转图片失败'))
-      // Collect generated images
+    exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) {
+        console.error('[PDF转图片失败]', stderr || err.message)
+        return reject(new Error(`PDF转图片失败: ${stderr || err.message}`))
+      }
+      // Collect generated images - match both slide-1.png and slide-01.png formats
       const files = fs.readdirSync(outputDir)
         .filter(f => f.startsWith('slide') && f.endsWith('.png'))
         .sort()
@@ -357,11 +499,11 @@ function callAI(prompt) {
 }
 
 // Text to speech using edge-tts
-function textToSpeech(text, outputPath) {
+function textToSpeech(text, outputPath, voice = 'zh-CN-XiaoxiaoNeural') {
   return new Promise((resolve, reject) => {
     // Escape text for shell
     const safeText = text.replace(/'/g, "'\\''").replace(/\n/g, ' ')
-    const cmd = `edge-tts --voice zh-CN-XiaoxiaoNeural --text '${safeText}' --write-media "${outputPath}"`
+    const cmd = `edge-tts --voice ${voice} --text '${safeText}' --write-media "${outputPath}"`
     exec(cmd, { timeout: 60000 }, (err) => {
       if (err) {
         console.error('[TTS Error]', err.message)

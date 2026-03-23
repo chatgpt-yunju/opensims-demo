@@ -1,5 +1,6 @@
 <template>
-  <div class="avatar-container" :class="{ speaking }">
+  <div class="avatar-container" :class="{ speaking }"
+       :style="{ '--hair': hairColor, '--skin': skinColor, '--suit': suitColor }">
     <div class="avatar-body">
       <div class="avatar-head">
         <!-- 头发 -->
@@ -13,6 +14,8 @@
           </div>
           <!-- 嘴巴 -->
           <div class="mouth" :class="{ open: mouthOpen }"></div>
+          <!-- 真人照片覆盖 -->
+          <img v-if="photoUrl" :src="photoUrl" class="avatar-photo" />
         </div>
       </div>
       <!-- 身体 -->
@@ -27,7 +30,11 @@ import { ref, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
   speaking: { type: Boolean, default: false },
-  name: { type: String, default: 'AI 讲师' }
+  name: { type: String, default: 'AI 讲师' },
+  hairColor: { type: String, default: '#2c2c3a' },
+  skinColor: { type: String, default: '#f5d6b8' },
+  suitColor: { type: String, default: '#667eea' },
+  photoUrl: { type: String, default: null }
 })
 
 const mouthOpen = ref(false)
@@ -73,7 +80,7 @@ onUnmounted(() => clearInterval(mouthTimer))
   left: -5px;
   right: -5px;
   height: 45px;
-  background: #2c2c3a;
+  background: var(--hair);
   border-radius: 40px 40px 0 0;
   z-index: 1;
 }
@@ -83,9 +90,17 @@ onUnmounted(() => clearInterval(mouthTimer))
   left: 0;
   right: 0;
   bottom: 0;
-  background: #f5d6b8;
+  background: var(--skin);
   border-radius: 40px 40px 30px 30px;
   overflow: hidden;
+}
+.avatar-photo {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 40px 40px 30px 30px;
+  z-index: 2;
 }
 .eyes {
   display: flex;
@@ -104,7 +119,7 @@ onUnmounted(() => clearInterval(mouthTimer))
 .pupil {
   width: 6px;
   height: 6px;
-  background: #2c2c3a;
+  background: var(--hair);
   border-radius: 50%;
   position: absolute;
   top: 3px;
@@ -142,7 +157,7 @@ onUnmounted(() => clearInterval(mouthTimer))
   left: 10px;
   right: 10px;
   height: 75px;
-  background: linear-gradient(180deg, #667eea, #5a6fd6);
+  background: linear-gradient(180deg, var(--suit), color-mix(in srgb, var(--suit), #000 15%));
   border-radius: 30px 30px 10px 10px;
   z-index: 1;
 }

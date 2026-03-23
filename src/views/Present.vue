@@ -6,6 +6,7 @@
       <span class="slide-counter">{{ current + 1 }} / {{ slides.length }}</span>
       <div class="topbar-right">
         <button class="btn-share" @click="shareLink">🔗 分享</button>
+        <button class="btn-edit-topbar" @click="startEditScript">✏️ 编辑讲稿</button>
         <button class="btn-auto" :class="{ active: autoPlay }" @click="toggleAuto">
           {{ autoPlay ? '⏸ 停止' : '▶ 自动播放' }}
         </button>
@@ -21,16 +22,48 @@
 
       <!-- 右侧面板 -->
       <div class="side-panel">
-        <!-- 数字人 -->
+        <!-- 数字人 + 选择 -->
         <div class="avatar-section">
-          <Avatar :speaking="isSpeaking" />
+          <Avatar :speaking="isSpeaking"
+                  :name="currentAvatar.name"
+                  :hairColor="currentAvatar.hair"
+                  :skinColor="currentAvatar.skin"
+                  :suitColor="currentAvatar.suit"
+                  :photoUrl="customPhotoUrl" />
+          <div class="avatar-picker">
+            <div v-for="a in avatars" :key="a.id"
+                 :class="['avatar-option', { active: selectedAvatarId === a.id }]"
+                 :title="a.name"
+                 @click="selectAvatar(a.id)">
+              <span class="avatar-dot" :style="{ background: a.suit }"></span>
+            </div>
+          </div>
+          <input type="file" ref="photoInput" accept="image/*" style="display:none" @change="uploadAvatarPhoto" />
+          <button class="btn-upload-photo" @click="photoInput.click()">📷 上传照片</button>
         </div>
-        <!-- 讲解词 -->
+        <!-- 音色选择 -->
+        <div class="voice-section">
+          <select v-model="selectedVoice" @change="changeVoice" :disabled="voiceLoading">
+            <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }} - {{ v.desc }}</option>
+          </select>
+          <span v-if="voiceLoading" class="voice-status">语音生成中...</span>
+        </div>
+        <!-- 讲解词（可编辑） -->
         <div class="script-section">
-          <div class="script-text">{{ slides[current].script }}</div>
+          <div v-if="!editingScript" class="script-text" @dblclick="startEditScript">
+            {{ slides[current].script }}
+            <button class="btn-edit-script" @click="startEditScript">✏️ 编辑</button>
+          </div>
+          <div v-else class="script-edit">
+            <textarea v-model="editScriptText" rows="6"></textarea>
+            <div class="script-edit-actions">
+              <button class="btn-save" @click="saveScript" :disabled="savingScript">{{ savingScript ? '保存中...' : '保存' }}</button>
+              <button class="btn-cancel" @click="cancelEditScript">取消</button>
+            </div>
+          </div>
         </div>
         <!-- 互动问答 -->
-        <div class="chat-section">
+        <div class="chat-section" v-show="false">
           <div class="chat-messages" ref="chatBox">
             <div v-for="(msg, i) in chatMessages" :key="i"
                  :class="['chat-msg', msg.role]">
@@ -73,7 +106,12 @@
         <button class="fs-stop" @click="exitFullscreen">✕ 退出全屏</button>
       </div>
       <div class="fs-avatar" @click.stop>
-        <Avatar :speaking="isSpeaking" />
+        <Avatar :speaking="isSpeaking"
+                :name="currentAvatar.name"
+                :hairColor="currentAvatar.hair"
+                :skinColor="currentAvatar.skin"
+                :suitColor="currentAvatar.suit"
+                :photoUrl="customPhotoUrl" />
       </div>
     </div>
   </div>
@@ -90,7 +128,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Avatar from '../components/Avatar.vue'
 
@@ -107,6 +145,24 @@ const chatLoading = ref(false)
 const chatBox = ref(null)
 const showToast = ref(false)
 
+// Avatar & voice
+const avatars = ref([])
+const voices = ref([])
+const selectedAvatarId = ref('default')
+const selectedVoice = ref('zh-CN-XiaoxiaoNeural')
+const voiceLoading = ref(false)
+const customPhotoUrl = ref(null)
+const photoInput = ref(null)
+const currentAvatar = computed(() =>
+  avatars.value.find(a => a.id === selectedAvatarId.value) ||
+  { name: 'AI 讲师', hair: '#2c2c3a', skin: '#f5d6b8', suit: '#667eea' }
+)
+
+// Script editing
+const editingScript = ref(false)
+const editScriptText = ref('')
+const savingScript = ref(false)
+
 let audio = null
 
 const handleEscape = (e) => {
@@ -116,9 +172,15 @@ const handleEscape = (e) => {
 onMounted(async () => {
   document.addEventListener('keydown', handleEscape)
   try {
-    const res = await fetch(`/api/ppt/${route.params.id}/slides`)
-    if (!res.ok) { router.push('/'); return }
-    slides.value = await res.json()
+    const [slidesRes, avatarsRes, voicesRes] = await Promise.all([
+      fetch(`/api/ppt/${route.params.id}/slides`),
+      fetch('/api/ppt/avatars'),
+      fetch('/api/ppt/voices')
+    ])
+    if (!slidesRes.ok) { router.push('/'); return }
+    slides.value = await slidesRes.json()
+    if (avatarsRes.ok) avatars.value = await avatarsRes.json()
+    if (voicesRes.ok) voices.value = await voicesRes.json()
   } catch { router.push('/') }
 })
 
@@ -151,7 +213,6 @@ function playCurrentAudio() {
     isSpeaking.value = false
     if (autoPlay.value && current.value < slides.value.length - 1) {
       next()
-      setTimeout(playCurrentAudio, 500)
     } else if (autoPlay.value) {
       autoPlay.value = false
       fullscreen.value = false
@@ -205,6 +266,90 @@ async function shareLink() {
     prompt('复制此链接分享：', url)
   }
 }
+
+// Avatar & voice functions
+async function selectAvatar(id) {
+  selectedAvatarId.value = id
+  try {
+    await fetch(`/api/ppt/${route.params.id}/avatar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatarId: id })
+    })
+  } catch {}
+}
+
+async function changeVoice() {
+  voiceLoading.value = true
+  try {
+    await fetch(`/api/ppt/${route.params.id}/voice`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice: selectedVoice.value })
+    })
+    // Poll voice-status
+    const poll = async () => {
+      const res = await fetch(`/api/ppt/${route.params.id}/voice-status`)
+      const data = await res.json()
+      if (data.status === 'generating') {
+        setTimeout(poll, 2000)
+      } else {
+        voiceLoading.value = false
+        // Refresh slides to get new audio URLs
+        const slidesRes = await fetch(`/api/ppt/${route.params.id}/slides`)
+        if (slidesRes.ok) slides.value = await slidesRes.json()
+      }
+    }
+    setTimeout(poll, 2000)
+  } catch {
+    voiceLoading.value = false
+  }
+}
+
+// Script editing functions
+function startEditScript() {
+  editScriptText.value = slides.value[current.value].script
+  editingScript.value = true
+}
+
+function cancelEditScript() {
+  editingScript.value = false
+}
+
+async function uploadAvatarPhoto(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const formData = new FormData()
+  formData.append('photo', file)
+  try {
+    const res = await fetch('/api/ppt/avatar-photo', { method: 'POST', body: formData })
+    const data = await res.json()
+    if (data.url) customPhotoUrl.value = data.url
+  } catch {}
+}
+
+async function saveScript() {
+  savingScript.value = true
+  try {
+    const res = await fetch(`/api/ppt/${route.params.id}/slides/${current.value}/script`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script: editScriptText.value })
+    })
+    const data = await res.json()
+    if (data.success) {
+      slides.value[current.value].script = editScriptText.value
+      if (data.audio) slides.value[current.value].audio = data.audio
+      editingScript.value = false
+    }
+  } catch {}
+  savingScript.value = false
+}
+
+// Reset script editing when changing slides
+watch(current, () => {
+  editingScript.value = false
+})
 
 async function sendChat() {
   const q = chatInput.value.trim()
@@ -557,4 +702,137 @@ async function sendChat() {
   padding: 8px;
   backdrop-filter: blur(8px);
 }
+
+/* Avatar picker */
+.avatar-section {
+  flex-direction: column;
+  align-items: center;
+}
+.avatar-picker {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  justify-content: center;
+}
+.avatar-option {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.avatar-option:hover { border-color: #888; }
+.avatar-option.active { border-color: #667eea; }
+.avatar-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+/* Voice section */
+.voice-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2a3e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.voice-section select {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #111;
+  color: #eee;
+  font-size: 0.8em;
+}
+.voice-section select:disabled { opacity: 0.5; }
+.voice-status {
+  font-size: 0.75em;
+  color: #667eea;
+  white-space: nowrap;
+}
+
+/* Script editing */
+.btn-edit-script {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid #444;
+  background: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 0.8em;
+}
+.btn-edit-script:hover { border-color: #667eea; color: #fff; }
+.script-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.script-edit textarea {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #111;
+  color: #eee;
+  font-size: 0.85em;
+  line-height: 1.6;
+  resize: vertical;
+}
+.script-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-save {
+  padding: 5px 16px;
+  border-radius: 6px;
+  border: none;
+  background: #667eea;
+  color: white;
+  cursor: pointer;
+  font-size: 0.8em;
+}
+.btn-save:disabled { opacity: 0.5; cursor: default; }
+.btn-cancel {
+  padding: 5px 16px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 0.8em;
+}
+.btn-cancel:hover { border-color: #667eea; color: #fff; }
+
+/* Upload photo button */
+.btn-upload-photo {
+  margin-top: 8px;
+  padding: 5px 14px;
+  border-radius: 14px;
+  border: 1px solid #444;
+  background: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 0.8em;
+}
+.btn-upload-photo:hover { border-color: #667eea; color: #fff; }
+
+/* Topbar edit script button */
+.btn-edit-topbar {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #444;
+  background: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.btn-edit-topbar:hover { border-color: #667eea; color: #fff; }
 </style>

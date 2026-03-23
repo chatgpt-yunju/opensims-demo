@@ -42,6 +42,27 @@
       </div>
     </div>
 
+    <!-- 更多工具推荐 -->
+    <div class="more-tools">
+      <h3>探索 OpenClaw 更多AI工具</h3>
+      <div class="tools-grid">
+        <a href="https://yunjunet.cn" target="_blank" rel="noopener" class="tool-card">
+          <div class="tool-icon">🎬</div>
+          <div class="tool-info">
+            <span class="tool-name">All in OpenClaw</span>
+            <span class="tool-desc">OpenClaw舆情预测</span>
+          </div>
+        </a>
+        <a href="https://planet.yunjunet.cn" target="_blank" rel="noopener" class="tool-card">
+          <div class="tool-icon">🌍</div>
+          <div class="tool-info">
+            <span class="tool-name">OpenClaw星球</span>
+            <span class="tool-desc">AI爱好者社区交流</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
     <Transition name="toast">
       <div v-if="showToast" class="toast">链接已复制到剪贴板</div>
     </Transition>
@@ -53,13 +74,26 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+// 生成设备唯一标识，每个浏览器独立计数
+function getDeviceId() {
+  let id = localStorage.getItem('aippt_device_id')
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem('aippt_device_id', id)
+  }
+  return id
+}
+const deviceId = getDeviceId()
+const deviceHeaders = { 'X-Device-Id': deviceId }
+
 const uploading = ref(false)
 const processing = ref(false)
 const statusText = ref('')
 const progress = ref(0)
 const historyList = ref([])
 const dailyRemaining = ref(null)
-const dailyLimit = ref(3)
+const dailyLimit = ref(5)
 const showToast = ref(false)
 
 onMounted(() => {
@@ -69,14 +103,14 @@ onMounted(() => {
 
 async function loadHistory() {
   try {
-    const res = await fetch('/api/ppt/list')
+    const res = await fetch('/api/ppt/list', { headers: deviceHeaders })
     if (res.ok) historyList.value = await res.json()
   } catch {}
 }
 
 async function loadLimit() {
   try {
-    const res = await fetch('/api/ppt/limit')
+    const res = await fetch('/api/ppt/limit', { headers: deviceHeaders })
     if (res.ok) {
       const data = await res.json()
       dailyRemaining.value = data.remaining
@@ -131,7 +165,7 @@ async function uploadFile(file) {
   formData.append('file', file)
 
   try {
-    const res = await fetch('/api/ppt/upload', { method: 'POST', body: formData })
+    const res = await fetch('/api/ppt/upload', { method: 'POST', body: formData, headers: deviceHeaders })
     const data = await res.json()
     if (!res.ok) {
       uploading.value = false
@@ -350,6 +384,55 @@ async function pollStatus(id) {
   font-size: 0.9em;
   z-index: 9999;
   backdrop-filter: blur(8px);
+}
+.more-tools {
+  margin-top: 50px;
+}
+.more-tools h3 {
+  margin-bottom: 16px;
+  color: #aaa;
+  font-size: 1em;
+}
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.tool-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 20px;
+  text-decoration: none;
+  transition: transform 0.2s, border-color 0.2s;
+  border: 1px solid #2a2a3e;
+}
+.tool-card:hover {
+  transform: translateY(-3px);
+  border-color: #667eea;
+}
+.tool-icon {
+  font-size: 2em;
+  flex-shrink: 0;
+}
+.tool-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tool-name {
+  color: #e0e0e0;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+.tool-desc {
+  color: #888;
+  font-size: 0.8em;
+}
+@media (max-width: 500px) {
+  .tools-grid { grid-template-columns: 1fr; }
 }
 .toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-10px); }

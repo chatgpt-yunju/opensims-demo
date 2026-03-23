@@ -14,6 +14,17 @@
 
         <div class="popup-content">
           <p>{{ config.text }}</p>
+          <div class="cross-promo">
+            <p class="promo-title">探索 OpenClaw 更多产品</p>
+            <div class="promo-links">
+              <a href="https://yunjunet.cn" target="_blank" rel="noopener" class="promo-btn">
+                All in OpenClaw · AI短视频
+              </a>
+              <a href="https://planet.yunjunet.cn" target="_blank" rel="noopener" class="promo-btn">
+                OpenClaw星球 · 社区交流
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -98,6 +109,35 @@ onUnmounted(() => {
   line-height: 1.6;
   color: #ccc;
   text-align: center;
+}
+.cross-promo {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #2a2a3e;
+}
+.promo-title {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.promo-links {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.promo-btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(102, 126, 234, 0.15);
+  color: #667eea;
+  text-decoration: none;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+.promo-btn:hover {
+  background: rgba(102, 126, 234, 0.3);
 }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
