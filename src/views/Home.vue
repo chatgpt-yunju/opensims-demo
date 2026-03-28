@@ -104,7 +104,7 @@ onMounted(() => {
 
 async function loadHistory() {
   try {
-    const res = await fetch(apiUrl('/api/ppt/list'), { headers: deviceHeaders })
+    const res = await fetch(apiUrl('/api/plugins/aippt/list'), { headers: deviceHeaders })
     if (res.ok) {
       const data = await res.json()
       historyList.value = data.map((item) => ({
@@ -117,7 +117,7 @@ async function loadHistory() {
 
 async function loadLimit() {
   try {
-    const res = await fetch(apiUrl('/api/ppt/limit'), { headers: deviceHeaders })
+    const res = await fetch(apiUrl('/api/plugins/aippt/limit'), { headers: deviceHeaders })
     if (res.ok) {
       const data = await res.json()
       dailyRemaining.value = data.remaining
@@ -172,7 +172,7 @@ async function uploadFile(file) {
   formData.append('file', file)
 
   try {
-    const res = await fetch(apiUrl('/api/ppt/upload'), { method: 'POST', body: formData, headers: deviceHeaders })
+    const res = await fetch(apiUrl('/api/plugins/aippt/upload'), { method: 'POST', body: formData, headers: deviceHeaders })
     const data = await res.json()
     if (!res.ok) {
       uploading.value = false
@@ -193,7 +193,7 @@ async function uploadFile(file) {
 async function pollStatus(id) {
   const poll = async () => {
     try {
-      const res = await fetch(apiUrl(`/api/ppt/${id}/status`))
+      const res = await fetch(apiUrl(`/api/plugins/aippt/${id}/status`))
       const data = await res.json()
       statusText.value = data.message
       progress.value = data.progress || 0
