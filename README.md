@@ -98,6 +98,119 @@ python main.py
 
 ---
 
+## 📱 小红书博主系统
+
+虚拟人可以成为**小红书博主**，发布笔记并获得粉丝、互动和收益。
+
+### 成为小红书博主
+
+1. 创建角色后，在游戏中选择"找工作"（选项4）
+2. 不断尝试直到获得职业"小红书博主"
+3. 或直接创建时选择（如果已添加到PROFESSIONS）
+
+### 发布笔记
+
+**CLI操作**：
+```
+选项8. 小红书发布
+```
+
+**HTTP API**：
+```http
+POST /api/v1/characters/{id}/actions/create_xiaohongshu_post
+Content-Type: application/json
+
+{
+  "title": "自定义标题（可选）",
+  "content": "笔记正文内容（可选）",
+  "tags": ["标签1", "标签2"],
+  "images": ["https://..."]  # 可选：图片URL
+}
+```
+
+如果未提供 `title/content/tags`，系统会根据角色性格自动生成。
+
+### 数据统计
+
+每个小红书博主都有以下追踪数据：
+
+| 属性 | 说明 |
+|------|------|
+| `followers` | 当前粉丝数 |
+| `total_views` | 总阅读量 |
+| `total_likes` | 总点赞数 |
+| `total_collections` | 总收藏数 |
+| `total_comments` | 总评论数 |
+| `posts_published` | 已发布笔记数 |
+| `hot_posts` | 爆款笔记数（阅读>1万）|
+| `engagement_rate` | 互动率（点赞+收藏+评论）/阅读 |
+| `monetization_level` | 变现等级（0-5）|
+
+### 收益机制
+
+- 每1000阅读约收入 **$10**（可在 `XIAOHONGSHU_CONFIG` 调整）
+- 爆款笔记（5%概率）会带来额外粉丝增长
+- 普通笔记可能掉粉，优质内容持续涨粉
+
+### 官方API集成
+
+配置 `XIAOHONGSHU_CONFIG["api_enabled"] = True` 后，笔记会发布到真实的小红书账户（需先申请开放平台权限）。
+
+### 浏览器自动化（无需官方API）
+
+使用 Playwright 模拟真实浏览器操作，绕过官方API审核：
+
+**1. 安装依赖**
+```bash
+pip install playwright
+playwright install chromium
+```
+
+**2. 获取Cookie**
+- 用Chrome登录 https://www.xiaohongshu.com/
+- F12 → Application → Cookies → 复制所有cookie
+- 保存到 `xhs_cookies.txt`（单行格式：`name1=value1; name2=value2`）
+
+**3. 通过MCP调用**
+在Claude Desktop配置中添加：
+```json
+{
+  "mcpServers": {
+    "opensims-xiaohongshu": {
+      "command": "python",
+      "args": ["G:/opensims_demo/mcp_xhs.py"]
+    }
+  }
+}
+```
+
+然后在Claude中直接使用 `xhs_publish` 工具。
+
+**4. 通过HTTP API调用**
+```http
+POST /api/v1/characters/{id}/actions/create_xiaohongshu_post
+{
+  "use_playwright": true,
+  "title": "通过浏览器自动化发布",
+  "content": "内容...",
+  "tags": ["标签"]
+}
+```
+
+**注意**：Playwright方式依赖cookie，可能被风控。建议定期更新cookie。
+
+### 三种方式对比
+
+| 方式 | 真实性 | 审核 | 稳定性 | 难度 |
+|------|--------|------|--------|------|
+| 模拟模式 | ❌ 虚假 | 无 | 高 | 极低 |
+| 官方API | ✅ 真实 | 严格 | 高 | 中 |
+| Playwright | ✅ 真实 | 绕过 | 中 | 低 |
+
+推荐：开发阶段用**模拟模式**，上线用**官方API**。
+
+---
+
 ## ⚙️ 配置选项
 
 编辑 `config.py`：
@@ -117,7 +230,8 @@ AUTO_CHAT_EXCLUDE_PLAYER = True    # 自动聊天是否排除玩家角色
 # 职业列表
 PROFESSIONS = [
     "上班族", "程序员", "主播", "画家", "外卖员",
-    "教师", "医生", "律师", "工程师", "自由职业"
+    "教师", "医生", "律师", "工程师", "自由职业",
+    "小红书博主"  # 内容创作者
 ]
 ```
 
@@ -130,6 +244,36 @@ API_KEY = "sk-..."  # 您的API密钥
 API_MODEL = "step-3.5-flash"
 USE_MOCK = False  # True使用内置Mock回复（无需API）
 ```
+
+### 小红书官方API（可选）
+
+如果希望将笔记发布到真实小红书账户，需要申请开放平台权限：
+
+```python
+# 小红书开放平台配置
+XIAOHONGSHU_CONFIG = {
+    "api_enabled": False,             # True启用官方API
+    "app_id": "your_app_id",         # 应用ID
+    "app_secret": "your_app_secret", # 应用Secret
+    "access_token": "user_token",    # 用户授权Token
+    "api_endpoint": "https://api.xiaohongshu.com/api/gxapi/",
+    
+    # 模拟模式参数（api_enabled=False时使用）
+    "max_tags": 5,
+    "max_title_length": 20,
+    "max_content_length": 1000,
+    "base_followers": 100,
+    "base_engagement_rate": 0.02,
+    "hot_probability": 0.05,
+    "income_per_1000_views": 10
+}
+```
+
+申请流程：
+1. 访问 [小红书开放平台](https://open.xiaohongshu.com/)
+2. 创建应用，获取 `app_id` 和 `app_secret`
+3. 实现OAuth授权流程获取用户 `access_token`
+4. 配置到 `config.py`
 
 ---
 
@@ -146,7 +290,10 @@ OpenSims可作为**Agent服务**被其他程序调用，执行复杂任务。
 pip install fastapi uvicorn
 
 # 启动API服务器（端口8000）
-uvicorn openclaw_api:app --host 127.0.0.1 --port 8000
+uvicorn web_api:app --host 127.0.0.1 --port 8000
+
+# 或直接运行
+python web_api.py
 ```
 
 #### API端点
@@ -163,13 +310,29 @@ DELETE /api/v1/virtual-humans/{id}      # 删除
 ##### 行动控制
 
 ```http
+# 基本行动
 POST /api/v1/virtual-humans/{id}/actions/eat
 POST /api/v1/virtual-humans/{id}/actions/sleep
 POST /api/v1/virtual-humans/{id}/actions/work
+POST /api/v1/virtual-humans/{id}/actions/relax
+POST /api/v1/virtual-humans/{id}/actions/socialize
+POST /api/v1/virtual-humans/{id}/actions/shop
+POST /api/v1/virtual-humans/{id}/actions/find_job
+
+# 聊天
 POST /api/v1/virtual-humans/{id}/actions/chat
 {
   "target": "小明",          # 可选，对话对象
   "message": "你好呀！"       # 对话内容
+}
+
+# 小红书发布（职业：小红书博主）
+POST /api/v1/virtual-humans/{id}/actions/create_xiaohongshu_post
+{
+  "title": "自定义标题（可选）",
+  "content": "笔记正文内容（可选）",
+  "tags": ["日常", "好物推荐"],  # 可选标签
+  "images": ["https://..."]      # 可选：图片URL列表
 }
 ```
 
@@ -364,6 +527,11 @@ python test_sim_game.py
 
 # 平衡性测试
 python test_balancing.py
+
+# 小红书功能测试
+python test_xiaohongshu.py            # CLI直接调用
+python test_xiaohongshu_api.py        # HTTP API调用
+python test_xiaohongshu_complete.py   # 完整工作流测试
 ```
 
 ---
@@ -378,14 +546,18 @@ opensims_demo/
 ├── auto_chat_scheduler.py  # 自动聊天调度器
 ├── virtual_human.py        # SimPerson核心类（模拟人生）
 ├── api_client.py           # API客户端（OpenAI兼容）
+├── xhs_api.py              # 小红书开放平台API客户端
 ├── storage.py              # JSON持久化
 ├── config.py               # 配置文件
 ├── main.py                 # CLI主程序（游戏入口）
-├── openclaw_api.py         # HTTP API服务器（待实现）
+├── web_api.py              # HTTP API服务器（FastAPI）
 ├── openclaw_cli.py         # CLI命令封装（待实现）
 ├── openclaw_service.py     # Windows服务（待实现）
 ├── test_*.py               # 测试文件
-├── requirements.txt        # 依赖
+├── requirements.txt        # 基础依赖
+├── requirements_mcp.txt    # MCP插件依赖
+├── mcp_xhs.py              # 小红书MCP服务器（Claude Desktop插件）
+├── xhs_playwright.py       # Playwright浏览器自动化
 ├── README.md               # 本文档
 └── COMPREHENSIVE_README.md # 完整文档（本文件）
 ```

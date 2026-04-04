@@ -60,7 +60,7 @@ class ActionResult(BaseModel):
 # ========== 工具函数 ==========
 def character_to_dict(vh: SimPerson) -> Dict[str, Any]:
     """将虚拟人转换为字典（API响应）"""
-    return {
+    result = {
         "id": vh.id,
         "name": vh.name,
         "personality": vh.personality,
@@ -78,6 +78,12 @@ def character_to_dict(vh: SimPerson) -> Dict[str, Any]:
         "alive": vh.alive,
         "memory_count": len(vh.memory)
     }
+
+    # 如果虚拟人有小红书数据，包含在响应中
+    if hasattr(vh, 'xiaohongshu'):
+        result['xiaohongshu'] = vh.xiaohongshu.copy()
+
+    return result
 
 # ========== REST API 端点 ==========
 
@@ -136,7 +142,8 @@ async def execute_action(vh_id: str, action_name: str):
         "relax": vh.relax,
         "socialize": lambda: vh.socialize(),
         "shop": vh.shop,
-        "find_job": vh.find_job
+        "find_job": vh.find_job,
+        "create_xiaohongshu_post": vh.create_xiaohongshu_post
     }
 
     if action_name not in action_methods:

@@ -1,0 +1,14 @@
+# OpenSims + OpenClaw MCP插件依赖
+# 用于小红书发布MCP服务器
+
+# MCP SDK
+mcp>=0.9.0
+
+# Playwright浏览器自动化（可选）
+playwright>=1.40.0
+
+# 小红书API客户端（已包含xhs_api.py）
+# 无需额外依赖
+
+# 需要安装浏览器驱动（首次运行）：
+# playwright install chromium

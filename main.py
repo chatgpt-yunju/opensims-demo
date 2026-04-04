@@ -145,6 +145,14 @@ class OpenSimsDemo:
             return "当前虚拟人无法购物"
         return vh.shop()
 
+    def sim_create_xiaohongshu_post(self):
+        vh = self.agent_manager.get_active()
+        if not vh or not hasattr(vh, 'create_xiaohongshu_post'):
+            return "当前虚拟人无法发布小红书笔记（需要职业：小红书博主）"
+        if vh.job != "小红书博主":
+            return f"{vh.name} 不是小红书博主！请先找工作或转职。"
+        return vh.create_xiaohongshu_post()
+
     def sim_day_pass(self):
         vh = self.agent_manager.get_active()
         if not vh or not hasattr(vh, 'day_pass'):
@@ -208,9 +216,9 @@ class OpenSimsDemo:
             # 显示选项
             print("行动选项（灵魂永生模式）:")
             print("  1. 吃饭   2. 睡觉   3. 工作   4. 找工作")
-            print("  5. 娱乐   6. 社交   7. 购物   8. 聊天（当前）")
-            print("  9. 聊天（指定其他人） 10. 结束今天")
-            print("  11. 查看所有角色 12. 切换角色 13. 创建AI角色 14. 退出")
+            print("  5. 娱乐   6. 社交   7. 购物   8. 小红书发布")
+            print("  9. 聊天（当前） 10. 聊天（指定其他人） 11. 结束今天")
+            print("  12. 查看所有角色 13. 切换角色 14. 创建AI角色 15. 退出")
             choice = input("请选择行动: ").strip()
 
             if choice == "1":
@@ -232,12 +240,22 @@ class OpenSimsDemo:
             elif choice == "7":
                 print(f"  >> {vh.name} {self.sim_shop()}")
             elif choice == "8":
+                # 小红书发布
+                if vh.job != "小红书博主":
+                    print(f"  注意：{vh.name} 当前职业是 {vh.job}，不是小红书博主")
+                    confirm = input("  是否要发布小红书笔记？（仍会执行，但效果可能不佳）(y/N): ").strip().lower()
+                    if confirm != 'y':
+                        continue
+                print(f"  >> {vh.name} 正在撰写小红书笔记...")
+                result = self.sim_create_xiaohongshu_post()
+                print(f"  {result}")
+            elif choice == "9":
                 # 聊天（当前角色）
                 msg = input("  你想对虚拟人说什么？: ").strip()
                 if msg:
                     reply = self.chat(msg)
                     print(f"    {vh.name}: {reply[:80]}")
-            elif choice == "9":
+            elif choice == "10":
                 # 指挥其他虚拟人聊天
                 vhs = self.agent_manager.list_virtual_humans()
                 if len(vhs) <= 1:
@@ -253,10 +271,10 @@ class OpenSimsDemo:
                     if msg:
                         reply = self.chat_with_vh(target_id, msg)
                         print(f"    {vh.name}: {reply[:80]}")
-            elif choice == "10":
+            elif choice == "11":
                 result = self.sim_day_pass()
                 print(f"  >> {result}")
-            elif choice == "11":
+            elif choice == "12":
                 vhs = self.agent_manager.list_virtual_humans()
                 if not vhs:
                     print("  还没有任何虚拟人！")
@@ -271,7 +289,7 @@ class OpenSimsDemo:
                             print(f"      年龄: {v.get('age', '?'):.1f}, 职业: {v.get('job', '?')}, 金钱: ${v.get('money', '?')}")
                         else:
                             print(f"      享年: {v.get('age','?'):.1f}岁, 死因: {v.get('death_cause','?')}")
-            elif choice == "12":
+            elif choice == "13":
                 vhs = self.agent_manager.list_virtual_humans()
                 if not vhs:
                     print("  还没有任何虚拟人！")
@@ -284,7 +302,7 @@ class OpenSimsDemo:
                     switch = input("  输入ID切换角色: ").strip()
                     if switch:
                         self.select_virtual_human(switch)
-            elif choice == "13":
+            elif choice == "14":
                 # 创建AI角色（非玩家控制）
                 name = input("  AI角色昵称: ").strip() or "AI村民"
                 types = list(PERSONALITY_PRESETS.keys())
@@ -292,7 +310,7 @@ class OpenSimsDemo:
                 ptype = input(f"  选择性格 [{types[0]}]: ").strip() or types[0]
                 self.create_virtual_human(name, ptype, is_player=False)
                 print(f"  ✅ 创建AI角色 {name} 成功！它将自主生活。")
-            elif choice == "14" or choice.lower() in ['quit', 'exit', 'q']:
+            elif choice == "15" or choice.lower() in ['quit', 'exit', 'q']:
                 print("再见！期待下次人生旅程。")
                 # 停止自动聊天调度器
                 self.auto_chat_scheduler.stop()

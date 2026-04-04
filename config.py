@@ -50,7 +50,8 @@ LIFE_STAGES = {
 # 职业列表
 PROFESSIONS = [
     "上班族", "程序员", "主播", "画家", "外卖员",
-    "教师", "医生", "律师", "工程师", "自由职业"
+    "教师", "医生", "律师", "工程师", "自由职业",
+    "小红书博主"  # 新增：内容创作者
 ]
 
 # 游戏参数
@@ -74,4 +75,25 @@ NATURAL_DECAY = {
     "energy": -5,
     "social": -5,
     "fun": -5
+}
+
+# ===== 小红书博主配置 =====
+# 小红书平台参数
+XIAOHONGSHU_CONFIG = {
+    "max_tags": 5,                    # 最多标签数
+    "max_title_length": 20,           # 标题最大长度
+    "max_content_length": 1000,       # 正文最大长度
+    "base_followers": 100,            # 初始粉丝数
+    "base_engagement_rate": 0.02,     # 基础互动率（2%）
+    "hot_probability": 0.05,          # 爆款概率（5%）
+    "income_per_1000_views": 10,      # 每千次阅读收入（元）
+    # 官方API配置（可选，如不配置则使用模拟模式）
+    "api_enabled": False,             # 是否启用官方API
+    "app_id": "",                     # 小红书开放平台App ID
+    "app_secret": "",                 # App Secret
+    "access_token": "",               # 用户授权Access Token
+    "api_endpoint": "https://api.xiaohongshu.com/api/gxapi/",  # API端点
+    # Playwright自动化配置
+    "playwright_cookie_file": "xhs_cookies.txt",  # cookie文件路径
+    "playwright_headless": True,      # 是否无头模式运行
 }
