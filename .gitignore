@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.spec
+opensims_demo.spec
+
+# Sensitive files - DO NOT COMMIT
+.env
+*.key
+secrets.json
+*_secret*
+*_token*
+
+# Data files (optional, keep if you want to track demo_data.json)
+# demo_data.json
+
+# Project specific
+agents/__pycache__/
+# 保留test_*.py文件用于版本控制
