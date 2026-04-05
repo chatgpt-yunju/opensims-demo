@@ -55,6 +55,23 @@ class SimPerson:
             "relationship": 0
         }
 
+        # === 使命引导者属性 ===
+        self.is_mentor = False  # 是否为导师角色（教师/贵人）
+        self.mentor_type = self._assign_mentor_type()  # 导师类型（如果is_mentor=True才有效）
+        self.guidance_style = self._determine_guidance_style()  # 引导风格
+        self.guidance_goal = "帮助玩家找到人生使命"  # 所有虚拟人的共同目标
+        self.relationship_with_player = 50  # 与玩家的关系度 (0-100)
+        self.last_guidance_topic = None  # 上次引导话题
+        self.discovered_player_interests: List[str] = []  # 发现的玩家兴趣
+        self.mentor_trigger_count = 0  # 主动触发次数
+
+        # === Multi-Agent 协作系统 ===
+        self.multi_agent_system = None  # 延迟初始化，在首次引导时创建
+        self.use_multi_agent = True  # 是否启用多Agent协作
+
+        # 根据初始职业确定是否为导师
+        self._update_mentor_status_from_job()
+
         # === 小红书博主专用属性 ===
         # 只有当职业是"小红书博主"时才激活
         self.xiaohongshu = {
@@ -69,6 +86,212 @@ class SimPerson:
             "last_post_date": None,  # 最后发布时间
             "monetization_level": 0  # 变现等级（0-5）
         }
+
+    # ========== 使命引导者系统 ==========
+    def _assign_mentor_type(self) -> str:
+        """根据性格分配导师类型"""
+        f = self.personality.get("friendliness", 0.5)
+        h = self.personality.get("humor", 0.5)
+        s = self.personality.get("seriousness", 0.5)
+
+        if h > 0.7:
+            return "创意激发者"  # 幽默型：激发创意和乐趣
+        elif s > 0.7:
+            return "目标规划师"  # 严肃型：目标设定和执行力
+        elif f > 0.7:
+            return "情感支持者"  # 友好型：情感支持和倾听
+        else:
+            return "平衡引导者"  # 中立型：全面平衡
+
+    def _determine_guidance_style(self) -> str:
+        """确定引导风格"""
+        styles = {
+            "创意激发者": "通过创意活动和趣味挑战引导",
+            "目标规划师": "通过结构化任务和目标分解引导",
+            "情感支持者": "通过深度对话和情感共鸣引导",
+            "平衡引导者": "根据情况灵活调整引导方式"
+        }
+        return styles.get(self.mentor_type, "灵活引导")
+
+    def generate_mission_guidance(self, player_input: str, player_growth: 'PlayerGrowth') -> Dict:
+        """
+        生成使命引导对话和任务
+        返回包含回复和可能的引导任务的结构化数据
+        """
+        # 基于性格和导师类型生成引导内容
+        context = self._build_guidance_context(player_input, player_growth)
+
+        # 根据当前玩家状态决定引导策略
+        strategy = self._choose_guidance_strategy(player_growth)
+
+        # 生成引导回复
+        reply = self._craft_guidance_reply(context, strategy, player_growth)
+
+        # 记录引导历史
+        if player_growth:
+            player_growth.record_guidance(self.name, "dialogue", reply)
+
+        return {
+            "reply": reply,
+            "guidance_type": strategy["type"],
+            "suggested_action": strategy.get("action"),
+            "topic": strategy["topic"]
+        }
+
+    def _build_guidance_context(self, player_input: str, player_growth: 'PlayerGrowth') -> str:
+        """构建引导上下文"""
+        context_parts = [
+            f"你是{self.name}，一个{self.age:.0f}岁的{self._translate_stage(self.stage)}，职业是{self.job}",
+            f"你的性格：友好度{self.personality.get('friendliness', 0.5):.1f}, 幽默度{self.personality.get('humor', 0.5):.1f}, 严肃度{self.personality.get('seriousness', 0.5):.1f}",
+            f"你的导师类型：{self.mentor_type}",
+            f"你的目标：帮助玩家（玩家）找到人生使命",
+        ]
+
+        if player_growth:
+            summary = player_growth.get_growth_summary()
+            context_parts.append(f"\n玩家当前状态:")
+            context_parts.append(f"  - 已发现兴趣: {', '.join(summary['discovered_interests']) if summary['discovered_interests'] else '无'}")
+            context_parts.append(f"  - 使命状态: {summary['current_status']}")
+            if summary['life_mission']:
+                context_parts.append(f"  - 已确认使命: {summary['life_mission']}")
+            context_parts.append(f"  - 完成的挑战: {summary['challenges_completed']}个")
+            context_parts.append(f"  - 收到的引导: {summary['total_guidance_sessions']}次")
+
+        context_parts.append(f"\n玩家刚才说: {player_input}")
+
+        return "\n".join(context_parts)
+
+    def _choose_guidance_strategy(self, player_growth: 'PlayerGrowth') -> Dict:
+        """选择合适的引导策略"""
+        # 基于玩家成长阶段选择策略
+        if not player_growth or not player_growth.discovered_interests:
+            # 阶段1：兴趣探索
+            return {
+                "type": "explore_interest",
+                "topic": "探索兴趣",
+                "action": "建议尝试新的活动",
+                "question_type": "open_ended"
+            }
+        elif not player_growth.confirmed_life_mission and player_growth.challenges_completed < 5:
+            # 阶段2：技能发展和挑战
+            top_interest = player_growth.discovered_interests[0] if player_growth.discovered_interests else "通用技能"
+            return {
+                "type": "skill_building",
+                "topic": top_interest,
+                "action": f"提供关于{top_interest}的小挑战",
+                "question_type": "challenge"
+            }
+        elif player_growth.mission_clues and not player_growth.confirmed_life_mission:
+            # 阶段3：使命线索整合
+            return {
+                "type": "mission_synthesis",
+                "topic": "整合使命线索",
+                "action": "引导玩家思考线索之间的联系",
+                "question_type": "reflective"
+            }
+        else:
+            # 阶段4：使命确认或后续成长
+            return {
+                "type": "mission_confirmation",
+                "topic": "确认人生使命",
+                "action": "鼓励玩家明确表达使命",
+                "question_type": "direct"
+            }
+
+    def _craft_guidance_reply(self, context: str, strategy: Dict, player_growth: 'PlayerGrowth') -> str:
+        """ Craft 引导式回复"""
+        # 基于导师类型和策略生成回复
+        mentor_phrases = {
+            "创意激发者": [
+                "探索无限可能...",
+                "让我帮你打开新世界的大门！",
+                "今天我们来点有趣的东西！"
+            ],
+            "目标规划师": [
+                "让我们制定一个清晰的计划。",
+                "目标分解是成功的关键。",
+                "我会帮你一步步实现。"
+            ],
+            "情感支持者": [
+                "我理解你的感受。",
+                "你可以和我分享任何想法。",
+                "你的内心声音很重要。"
+            ],
+            "平衡引导者": [
+                "让我们综合考虑各方面。",
+                "平衡发展是个好主意。",
+                "我会给你全面的建议。"
+            ]
+        }
+
+        opener = random.choice(mentor_phrases.get(self.mentor_type, ["你好！"]))
+
+        # 根据策略类型构建回复
+        if strategy["type"] == "explore_interest":
+            reply = f"{opener}\n\n我想了解你的兴趣。你平时喜欢做什么？有什么事情让你废寝忘食吗？\n\n探索不同的领域是很重要的第一步。"
+        elif strategy["type"] == "skill_building":
+            topic = strategy["topic"]
+            reply = f"{opener}\n\n我发现你对{topic}感兴趣。我有个小挑战给你：\n\n尝试深入{topic}的某个方面，花30分钟学习或实践，然后告诉我你的感受。\n\n愿意接受吗？"
+        elif strategy["type"] == "mission_synthesis":
+            clues = player_growth.mission_clues[-3:] if player_growth.mission_clues else []
+            reply = f"{opener}\n\n我注意到你收集了一些线索：\n"
+            for i, clue in enumerate(clues, 1):
+                reply += f"  {i}. {clue['clue']}\n"
+            reply += f"\n这些线索之间有联系吗？你觉得它们指向什么共同的方向？"
+        elif strategy["type"] == "mission_confirmation":
+            if player_growth.confirmed_life_mission:
+                reply = f"{opener}\n\n你之前提到的人生使命是：{player_growth.confirmed_life_mission}\n\n现在你对这个使命有什么更深的体会吗？或者有新的发现？"
+            else:
+                reply = f"{opener}\n\n经过这么久的探索，你是否感觉找到了什么特别想做的事情？\n\n试着用一句话描述你的人生使命，我们可以一起完善它。"
+        else:
+            reply = f"{opener}\n\n让我们聊聊你的成长吧。"
+
+        # 添加性格修饰
+        if self.personality.get("humor", 0) > 0.6:
+            reply += "\n（放松点，这应该是个有趣的过程！）"
+        if self.personality.get("seriousness", 0) > 0.7:
+            reply += "\n请认真思考后再回答。"
+
+        return reply
+
+    def guide_player_growth(self, message: str, player_growth: 'PlayerGrowth') -> str:
+        """
+        对外接口：引导玩家成长
+        返回回复消息（可能包含任务建议）
+
+        如果启用 multi_agent，则使用多Agent协作生成回复
+        否则使用单Agent基础模式
+        """
+        if self.use_multi_agent:
+            # 延迟初始化多Agent系统（避免循环导入）
+            if self.multi_agent_system is None:
+                try:
+                    from multi_agent_guidance import MultiAgentGuidanceSystem
+                    self.multi_agent_system = MultiAgentGuidanceSystem(self)
+                except ImportError:
+                    self.use_multi_agent = False
+                    print(f"[{self.name}] Multi-Agent模块未找到，降级到单Agent模式")
+
+            if self.use_multi_agent and self.multi_agent_system:
+                # 多Agent协作生成
+                result = self.multi_agent_system.collaborative_guidance(message, player_growth)
+                return result["final_reply"]
+
+        # 降级：单Agent基础模式
+        guidance = self.generate_mission_guidance(message, player_growth)
+        return guidance["reply"]
+
+
+    # ========== 角色职业状态同步 ==========
+    def _update_mentor_status_from_job(self):
+        """根据职业更新是否为导师"""
+        mentor_jobs = ["教师", "贵人"]
+        self.is_mentor = self.job in mentor_jobs
+        if self.is_mentor:
+            self.mentor_type = self._assign_mentor_type()
+            self.guidance_style = self._determine_guidance_style()
+            # 导师初始关系度更高
+            self.relationship_with_player = max(self.relationship_with_player, 60)
 
     # ========== 模拟人生核心系统 ==========
     def _get_stage_by_age(self, age: float) -> str:
@@ -167,6 +390,7 @@ class SimPerson:
         }
         hint = salary_hints.get(new_job, "新工作")
         self.job = new_job
+        self._update_mentor_status_from_job()  # 更新导师状态
         self.actions_today += 1
         # day_counter 由 day_pass 处理
         return f"恭喜！你找到了新工作：{new_job}（{hint}）"
@@ -518,8 +742,8 @@ Note ID: {note_id}
         return self.memory[-last_n:] if self.memory else []
 
     def to_dict(self) -> dict:
-        """序列化（包含模拟人生数据）"""
-        return {
+        """序列化（包含模拟人生数据和导师属性）"""
+        data = {
             "id": self.id,
             "name": self.name,
             "personality": self.personality,
@@ -543,8 +767,14 @@ Note ID: {note_id}
                 "alive": self.alive,
                 "day_counter": self.day_counter,
                 "actions_today": self.actions_today
-            }
+            },
+            # 导师系统属性
+            "is_mentor": getattr(self, 'is_mentor', False),
+            "mentor_type": getattr(self, 'mentor_type', '平衡引导者'),
+            "relationship_with_player": getattr(self, 'relationship_with_player', 50),
+            "discovered_player_interests": getattr(self, 'discovered_player_interests', []),
         }
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> 'SimPerson':
@@ -584,9 +814,23 @@ Note ID: {note_id}
             "mood": vh.mood_level,
             "relationship": 0
         }
+
+        # 加载导师系统属性
+        vh.is_mentor = data.get("is_mentor", False)
+        vh.mentor_type = data.get("mentor_type", "平衡引导者")
+        vh.relationship_with_player = data.get("relationship_with_player", 50)
+        vh.discovered_player_interests = data.get("discovered_player_interests", [])
+        if not hasattr(vh, 'mentor_trigger_count'):
+            vh.mentor_trigger_count = 0
+        # 初始化 multi_agent_system
+        vh.multi_agent_system = None
+        vh.use_multi_agent = True
+
+        # 如果职业是教师/贵人，自动标记为导师
+        vh._update_mentor_status_from_job()
+
         return vh
 
-    # ========== 聊天兼容方法 ==========
     def update_state_after_chat(self, user_input: str, api_response: dict):
         """根据对话更新状态（保持与旧代码兼容）"""
         # 能量消耗
@@ -606,61 +850,51 @@ Note ID: {note_id}
         """获取简状态（用于显示）"""
         return f"能量: {self.energy}/100 | 情绪: {self.mood_level} | 金钱: ${self.money}"
 
-    def add_memory(self, role: str, content: str):
-        """添加对话记忆"""
-        memory_item = {
-            "role": role,
-            "content": content,
-            "timestamp": time.time()
-        }
-        self.memory.append(memory_item)
-
-        # 限制记忆长度，防止过大
-        if len(self.memory) > 100:
-            self.memory = self.memory[-100:]
-
-    def update_state_after_chat(self, user_input: str, api_response: dict):
-        """根据对话更新状态"""
-        # 能量消耗（每条对话-1到-3）
-        energy_delta = api_response.get("energy_delta", -2)
-        self.state["energy"] = max(0, min(100, self.state["energy"] + energy_delta))
-
-        # 情绪更新
-        if "emotion" in api_response:
-            self.state["mood"] = api_response["emotion"]
-
-        # 关系度提升（如果是友好对话）
-        if self.state["energy"] > 50:
-            self.state["relationship"] = min(100, self.state["relationship"] + 1)
-
     def get_context(self, last_n: int = 10) -> List[Dict]:
         """获取最近N条对话作为上下文"""
         return self.memory[-last_n:] if self.memory else []
 
-    def get_status_text(self) -> str:
-        """获取状态文本（用于显示）"""
-        return f"能量: {self.state['energy']}/100 | 情绪: {self.state['mood']} | 关系: {self.state['relationship']}/100"
+    # ========== 关系系统 ==========
+    def update_relationship_with_player(self, delta: float, reason: str = None):
+        """更新与玩家的关系度"""
+        old_value = self.relationship_with_player
+        self.relationship_with_player = max(0, min(100, self.relationship_with_player + delta))
+        # 记录关系变化（可用于分析）
+        if reason:
+            pass  # TODO: 可选记录关系变化历史
+        return self.relationship_with_player - old_value
 
-    def to_dict(self) -> dict:
-        """序列化为字典"""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "personality": self.personality,
-            "memory": self.memory,
-            "state": self.state,
-            "created_at": self.created_at
-        }
+    def update_relationship_with_other_vh(self, other_id: str, delta: float, reason: str = None):
+        """更新与其他虚拟人的关系度"""
+        if other_id not in self.relationships:
+            self.relationships[other_id] = {"affection": 50, "trust": 50, "type": "neutral"}
 
-    @classmethod
-    def from_dict(cls, data: dict) -> 'VirtualHuman':
-        """从字典反序列化"""
-        vh = cls(data["name"], data["personality"], vh_id=data.get("id"))
-        vh.memory = data.get("memory", [])
-        vh.state = data.get("state", {
-            "energy": 100,
-            "mood": "neutral",
-            "relationship": 0
-        })
-        vh.created_at = data.get("created_at", time.time())
-        return vh
+        rel = self.relationships[other_id]
+        old_aff = rel["affection"]
+        rel["affection"] = max(0, min(100, rel["affection"] + delta))
+
+        # 信任度变化（只有正向互动才提升信任）
+        if delta > 0:
+            rel["trust"] = min(100, rel["trust"] + delta * 0.5)
+
+        # 关系类型标签
+        if rel["affection"] >= 80:
+            rel["type"] = "亲密"
+        elif rel["affection"] >= 60:
+            rel["type"] = "友好"
+        elif rel["affection"] >= 40:
+            rel["type"] = "中立"
+        elif rel["affection"] >= 20:
+            rel["type"] = "疏远"
+        else:
+            rel["type"] = "敌对"
+
+        return self.relationships[other_id]
+
+    def get_relationship_with_player(self) -> int:
+        """获取与玩家的关系度"""
+        return self.relationship_with_player
+
+    def get_relationship_with_other(self, other_id: str) -> Dict:
+        """获取与其他虚拟人的关系详情"""
+        return self.relationships.get(other_id, {"affection": 50, "trust": 50, "type": "陌生"})
