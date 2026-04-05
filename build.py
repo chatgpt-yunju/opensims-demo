@@ -2,17 +2,47 @@
 """
 OpenSims 打包脚本
 生成单个exe文件（主程序 + API服务器），带版本号
+自动递增build号
 """
 
 import os
 import sys
 import shutil
 import subprocess
+import json
 from datetime import datetime
 
-# 版本信息
-VERSION = "1.0.0"
-BUILD_DATE = datetime.now().strftime("%Y-%m-%d")
+# 加载版本信息
+def load_version():
+    """从version.json加载版本"""
+    version_file = 'version.json'
+    if os.path.exists(version_file):
+        with open(version_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    return {
+        "major": 1,
+        "minor": 0,
+        "patch": 0,
+        "build": 0,
+        "last_updated": datetime.now().isoformat()
+    }
+
+def increment_build():
+    """递增build号并保存"""
+    ver = load_version()
+    ver['build'] += 1
+    ver['last_updated'] = datetime.now().isoformat()
+    with open('version.json', 'w', encoding='utf-8') as f:
+        json.dump(ver, f, ensure_ascii=False, indent=2)
+    return ver
+
+# 获取当前版本
+version_data = increment_build()
+VERSION = f"{version_data['major']}.{version_data['minor']}.{version_data['patch']}.{version_data['build']}"
+BUILD_DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+print(f"[Build] 版本: {VERSION}  Build: {version_data['build']}")
 
 def run_command(cmd, description):
     """运行命令并打印"""
@@ -30,11 +60,11 @@ def build_exe():
     # 输出文件名（带版本号）
     exe_name = f"OpenSims_{VERSION}"
 
-    # 基本命令
+    # 基本命令 - 使用hidden-import替代collect-all（避免mcp cli依赖）
     cmd = [
         'pyinstaller',
         '--onefile',                    # 单个exe
-        '--windowed',                   # 无控制台窗口（GUI模式）
+        '--console',                   # 使用控制台窗口（便于调试）
         f'--name={exe_name}',           # exe名称（带版本）
         '--icon=static/icon.ico',       # 图标（如果存在）
         '--add-data=static;static',    # 静态资源
@@ -45,12 +75,16 @@ def build_exe():
         '--hidden-import=uvicorn.lifespan.on',
         '--hidden-import=playwright.async_api',
         '--hidden-import=playwright.sync_api',
-        '--collect-all=playwright',
-        '--collect-all=mcp',
+        '--hidden-import=mcp',
+        '--hidden-import=mcp.server',
+        '--hidden-import=mcp.types',
+        '--hidden-import=mcp.server.models',
+        '--hidden-import=mcp.server.stdio',
         '--exclude-module=matplotlib',
         '--exclude-module=tkinter',
         '--exclude-module=test',
         '--exclude-module=pytest',
+        '--exclude-module=mcp.cli',  # 排除CLI（需要typer）
         '--noconfirm',
         'main.py'
     ]

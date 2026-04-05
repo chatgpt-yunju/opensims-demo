@@ -3,6 +3,7 @@ import uuid
 import random
 from typing import List, Dict
 from config import LIFE_STAGES, PROFESSIONS, DAY_ACTIONS_LIMIT, NATURAL_DECAY, XIAOHONGSHU_CONFIG
+from human_like_chat import HumanLikeChatSystem
 
 class SimPerson:
     """模拟人生角色（扩展自VirtualHuman）"""
@@ -54,6 +55,13 @@ class SimPerson:
             "mood": self.mood_level,
             "relationship": 0
         }
+
+        # === Human-like Chat System ===
+        # 仿真人类聊天的6个核心特征：情绪语气、状态感知、记忆、主动延伸、口语化、知行合一
+        self.human_like_chat = HumanLikeChatSystem(
+            personality=self.personality,
+            memories=self.memory
+        )
 
         # === 使命引导者属性 ===
         self.is_mentor = False  # 是否为导师角色（教师/贵人）
@@ -118,14 +126,11 @@ class SimPerson:
         生成使命引导对话和任务
         返回包含回复和可能的引导任务的结构化数据
         """
-        # 基于性格和导师类型生成引导内容
-        context = self._build_guidance_context(player_input, player_growth)
-
         # 根据当前玩家状态决定引导策略
         strategy = self._choose_guidance_strategy(player_growth)
 
-        # 生成引导回复
-        reply = self._craft_guidance_reply(context, strategy, player_growth)
+        # 生成引导回复 - 传入玩家实际输入
+        reply = self._craft_guidance_reply(player_input, strategy, player_growth)
 
         # 记录引导历史
         if player_growth:
@@ -198,8 +203,8 @@ class SimPerson:
                 "question_type": "direct"
             }
 
-    def _craft_guidance_reply(self, context: str, strategy: Dict, player_growth: 'PlayerGrowth') -> str:
-        """ Craft 引导式回复"""
+    def _craft_guidance_reply(self, player_input: str, strategy: Dict, player_growth: 'PlayerGrowth') -> str:
+        """ Craft 引导式回复 - 结合玩家实际输入 """
         # 基于导师类型和策略生成回复
         mentor_phrases = {
             "创意激发者": [
@@ -226,25 +231,25 @@ class SimPerson:
 
         opener = random.choice(mentor_phrases.get(self.mentor_type, ["你好！"]))
 
-        # 根据策略类型构建回复
+        # 根据策略类型构建回复，并融入玩家实际输入
         if strategy["type"] == "explore_interest":
-            reply = f"{opener}\n\n我想了解你的兴趣。你平时喜欢做什么？有什么事情让你废寝忘食吗？\n\n探索不同的领域是很重要的第一步。"
+            reply = f"{opener}\n\n你刚才提到：「{player_input[:30]}」。这很有趣！\n\n我想了解：你平时喜欢做什么？有什么事情让你废寝忘食吗？\n\n探索不同的领域是很重要的第一步。"
         elif strategy["type"] == "skill_building":
             topic = strategy["topic"]
-            reply = f"{opener}\n\n我发现你对{topic}感兴趣。我有个小挑战给你：\n\n尝试深入{topic}的某个方面，花30分钟学习或实践，然后告诉我你的感受。\n\n愿意接受吗？"
+            reply = f"{opener}\n\n你刚才提到：「{player_input[:30]}」。我注意到你对「{topic}」感兴趣。\n\n我有个小挑战给你：尝试深入{topic}的某个方面，花30分钟学习或实践，然后告诉我你的感受。\n\n愿意接受吗？"
         elif strategy["type"] == "mission_synthesis":
             clues = player_growth.mission_clues[-3:] if player_growth.mission_clues else []
-            reply = f"{opener}\n\n我注意到你收集了一些线索：\n"
+            reply = f"{opener}\n\n基于你刚才说的「{player_input[:30]}」，结合你之前收集的线索：\n"
             for i, clue in enumerate(clues, 1):
                 reply += f"  {i}. {clue['clue']}\n"
             reply += f"\n这些线索之间有联系吗？你觉得它们指向什么共同的方向？"
         elif strategy["type"] == "mission_confirmation":
             if player_growth.confirmed_life_mission:
-                reply = f"{opener}\n\n你之前提到的人生使命是：{player_growth.confirmed_life_mission}\n\n现在你对这个使命有什么更深的体会吗？或者有新的发现？"
+                reply = f"{opener}\n\n你刚才提到：「{player_input[:30]}」。这让我想起你之前确认的人生使命：{player_growth.confirmed_life_mission}\n\n现在你对这个使命有什么更深的体会吗？或者有新的发现？"
             else:
-                reply = f"{opener}\n\n经过这么久的探索，你是否感觉找到了什么特别想做的事情？\n\n试着用一句话描述你的人生使命，我们可以一起完善它。"
+                reply = f"{opener}\n\n你刚才提到：「{player_input[:30]}」。经过这么久的探索，你是否感觉找到了什么特别想做的事情？\n\n试着用一句话描述你的人生使命，我们可以一起完善它。"
         else:
-            reply = f"{opener}\n\n让我们聊聊你的成长吧。"
+            reply = f"{opener}\n\n你刚才说：「{player_input[:30]}」。让我们聊聊你的成长吧。"
 
         # 添加性格修饰
         if self.personality.get("humor", 0) > 0.6:
@@ -786,6 +791,11 @@ Note ID: {note_id}
             age=data.get("sim", {}).get("age", 18)
         )
         vh.memory = data.get("memory", [])
+        # 重新初始化 human_like_chat 以使用加载的 memory 列表
+        vh.human_like_chat = HumanLikeChatSystem(
+            personality=vh.personality,
+            memories=vh.memory
+        )
         vh.created_at = data.get("created_at", time.time())
 
         # 加载模拟人生数据
@@ -859,6 +869,8 @@ Note ID: {note_id}
         """更新与玩家的关系度"""
         old_value = self.relationship_with_player
         self.relationship_with_player = max(0, min(100, self.relationship_with_player + delta))
+        # 同步到 state 字段，供其他系统使用
+        self.state["relationship"] = self.relationship_with_player
         # 记录关系变化（可用于分析）
         if reason:
             pass  # TODO: 可选记录关系变化历史

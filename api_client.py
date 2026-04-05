@@ -20,9 +20,33 @@ class APIClient:
         """生成回复（Mock或真实API）"""
         # 如果配置为Mock mode或未配置API密钥，使用Mock
         if self.use_mock or not self.api_key:
-            return self._mock_generate(vh, user_input)
+            response = self._mock_generate(vh, user_input)
         else:
-            return self._api_generate(vh, user_input)
+            response = self._api_generate(vh, user_input)
+
+        # Human-like Chat 增强：应用6个真人特征
+        if hasattr(vh, 'human_like_chat'):
+            # 构造当前状态（从 vh.state 中读取）
+            vh_state = {
+                "energy": vh.state.get("energy", 100),
+                "mood": vh.state.get("mood", "普通"),
+                "relationship": vh.state.get("relationship", 0)
+            }
+            # 额外状态
+            extra_state = {
+                "hunger": getattr(vh, 'hunger', 60),
+                "health": getattr(vh, 'health', 100),
+                "fun": getattr(vh, 'fun', 50)
+            }
+            enhanced = vh.human_like_chat.enhance_reply(
+                response["reply"],
+                user_input,
+                vh_state=vh_state,
+                vh_extra_state=extra_state
+            )
+            response["reply"] = enhanced
+
+        return response
 
     def _mock_generate(self, vh: SimPerson, user_input: str) -> Dict:
         """Mock回复引擎（无需API）"""
@@ -83,6 +107,19 @@ class APIClient:
 
     def _api_generate(self, vh: SimPerson, user_input: str) -> Dict:
         """调用OpenAI兼容API"""
+        # 会话管理：确保每个对话有唯一会话ID
+        session_id = getattr(vh, 'current_session_id', None)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            vh.current_session_id = session_id
+
+        # 限制历史长度：最多保留10轮对话（用户+助手=20条）
+        max_history = 10
+        if len(vh.memory) > max_history * 2:
+            # 保留最近的对话，但保留第一条作为"开场"
+            keep_start = 1  # 保留第一条系统开场
+            vh.memory = vh.memory[:keep_start] + vh.memory[-(max_history*2-1):]
+
         # 构建消息历史（OpenAI格式）
         messages = []
 
@@ -92,7 +129,7 @@ class APIClient:
 幽默度{vh.personality.get('humor', 0.5):.1f}/1.0，
 严肃度{vh.personality.get('seriousness', 0.5):.1f}/1.0。
 
-当前状态：能量值{vh.state['energy']}/100，情绪{vh.state['mood']}，与用户关系{vh.state['relationship']}/100。
+当前状态：能量值{vh.state['energy']}/100，情绪{vh.state['mood']}，与用户关系{vh.state.get('relationship', 0)}/100。
 
 请以这个虚拟人的身份回复用户，保持性格一致。回复要简洁自然，符合情绪状态。"""
 

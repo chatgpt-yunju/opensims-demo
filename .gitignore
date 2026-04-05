@@ -37,8 +37,37 @@ secrets.json
 *_secret*
 *_token*
 
-# Data files (optional, keep if you want to track demo_data.json)
-# demo_data.json
+# Data files - 不追踪（自动生成）
+demo_data.json
+*_data.json
+*_content_*.txt
+juejin_*.json
+juejin_*.txt
+xhs_content_*.json
+xhs_content_*.txt
+
+# Test outputs
+test_*.py
+!test_*.py  # 保留测试脚本本身，但生成的输出文件不追踪
+
+# Build artifacts
+*.exe
+*.spec
+build/
+dist/
+*.zip
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Playwright browsers (already in default, but ensure)
+ms-playwright/
 
 # Project specific
 agents/__pycache__/
