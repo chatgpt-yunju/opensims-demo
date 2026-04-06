@@ -5,6 +5,7 @@ import threading
 import time
 import sys
 import os
+from datetime import datetime
 
 # 动态导入 settings（支持PyInstaller）
 try:
@@ -31,6 +32,10 @@ class MentorChatGUI:
         self.auto_chat_stop = threading.Event()
         self.auto_chat_remaining = 0
 
+        # 虚拟人对话监控窗口
+        self.vh_monitor_window = None
+        self.vh_monitor_text = None
+
         # 构建界面（必须先创建控件，setup_system会用到chat_display）
         self.create_widgets()
 
@@ -42,6 +47,10 @@ class MentorChatGUI:
 
         # 自动聚焦输入框
         self.input_entry.focus()
+
+        # 注册虚拟人互聊回调
+        if self.demo.auto_chat_scheduler:
+            self.demo.auto_chat_scheduler.message_callback = self.on_virtual_chat_message
 
         # 启动自动聊天（如果设置中启用）
         self.start_auto_chat_if_enabled()
@@ -299,7 +308,7 @@ class MentorChatGUI:
             # 更新界面控件
             self.auto_rounds_var.set(rounds)
             self.auto_interval_var.set(interval)
-            # 启动自动聊天
+            # 启动用户↔导师自动聊天
             self._start_auto_chat_thread(rounds, interval)
             # 更新按钮状态
             self._set_auto_buttons_state(False)
@@ -307,6 +316,11 @@ class MentorChatGUI:
         else:
             self.auto_status_label.config(text="就绪")
             self._set_auto_buttons_state(True)
+
+        # 自动启动虚拟人互聊调度器（独立控制）
+        if self.demo.auto_chat_scheduler and not self.demo.auto_chat_scheduler.running:
+            self.demo.auto_chat_scheduler.start()
+            print("[GUI] 虚拟人互聊调度器已启动")
 
     def start_auto_chat_manual(self):
         """手动开启自动聊天（按钮点击）"""
@@ -554,6 +568,11 @@ class MentorChatGUI:
         menubar.add_cascade(label="帮助", menu=help_menu)
         help_menu.add_command(label="关于", command=self.show_about)
 
+        # 视图菜单（虚拟人互聊监控）
+        view_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="视图", menu=view_menu)
+        view_menu.add_command(label="虚拟人对话监控", command=self.create_vh_monitor_window)
+
     def switch_mentor(self):
         """切换导师对话框"""
         dialog = tk.Toplevel(self.root)
@@ -717,8 +736,59 @@ class MentorChatGUI:
     def on_closing(self):
         """窗口关闭事件"""
         self.stop_auto_chat()
+        if self.demo.auto_chat_scheduler:
+            self.demo.auto_chat_scheduler.stop()
         self.root.quit()
         self.root.destroy()
+
+    def create_vh_monitor_window(self):
+        """创建虚拟人对话监控窗口"""
+        if self.vh_monitor_window is None or not self.vh_monitor_window.winfo_exists():
+            self.vh_monitor_window = tk.Toplevel(self.root)
+            self.vh_monitor_window.title("虚拟人对话监控")
+            self.vh_monitor_window.geometry("600x400")
+            self.vh_monitor_window.transient(self.root)
+            self.vh_monitor_window.resizable(True, True)
+
+            # 文本框
+            self.vh_monitor_text = scrolledtext.ScrolledText(
+                self.vh_monitor_window,
+                wrap=tk.WORD,
+                state=tk.NORMAL,
+                font=("Microsoft YaHei", 10),
+                bg="#f5f5f5"
+            )
+            self.vh_monitor_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            self.vh_monitor_text.config(state=tk.DISABLED)
+
+            # 关闭时隐藏
+            self.vh_monitor_window.protocol("WM_DELETE_WINDOW", self.on_close_monitor)
+        else:
+            self.vh_monitor_window.deiconify()
+            self.vh_monitor_window.lift()
+
+    def on_close_monitor(self):
+        """关闭监控窗口（隐藏）"""
+        if self.vh_monitor_window:
+            self.vh_monitor_window.withdraw()
+
+    def on_virtual_chat_message(self, speaker_name: str, message: str, is_group: bool = False):
+        """处理虚拟人互聊消息（回调）"""
+        # 如果监控窗口未打开，自动创建并显示（可选）
+        if self.vh_monitor_window is None or not self.vh_monitor_window.winfo_exists():
+            self.create_vh_monitor_window()
+
+        if self.vh_monitor_text:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            prefix = f"[{timestamp}] "
+            if is_group:
+                prefix += "[群聊] "
+            prefix += f"{speaker_name}: "
+
+            self.vh_monitor_text.config(state=tk.NORMAL)
+            self.vh_monitor_text.insert(tk.END, prefix + message + "\n\n")
+            self.vh_monitor_text.see(tk.END)
+            self.vh_monitor_text.config(state=tk.DISABLED)
 
 
 if __name__ == "__main__":

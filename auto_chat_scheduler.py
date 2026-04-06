@@ -6,9 +6,17 @@ from config import AUTO_CHAT_ENABLED, AUTO_CHAT_INTERVAL, AUTO_CHAT_PROBABILITY,
 class AutoChatScheduler:
     """自动聊天调度器（灵魂永生模式）"""
 
-    def __init__(self, agent_manager, api_client):
+    def __init__(self, agent_manager, api_client, message_callback=None):
+        """初始化调度器
+
+        Args:
+            agent_manager: 代理管理器
+            api_client: API客户端
+            message_callback: 消息回调函数，接收 (speaker_name, message, is_group) 参数
+        """
         self.agent_manager = agent_manager
         self.api_client = api_client
+        self.message_callback = message_callback
         self.player_growth = None  # 延迟设置
         self.running = False
         self.thread = None
@@ -105,18 +113,25 @@ class AutoChatScheduler:
             else:
                 prompt = base_prompt
 
-            # 获取记忆上下文
-            memories = current_speaker.memory[-5:]  # 最近5条记忆
+            # 获取记忆上下文（最近20条，10轮对话）
+            memories = current_speaker.memory[-20:]  # 扩展上下文窗口
             context = "\n".join([f"{m['role']}: {m['content']}" for m in memories])
 
             try:
                 # 调用API生成回复
                 reply = self.api_client.generate_reply(current_speaker, prompt + "\n" + context)
-                message = reply.get('reply', "（沉默）")[:100]
+                message = reply.get('reply', "（沉默）")[:200]  # 允许更长回复
             except Exception as e:
                 message = f"（错误：{e}）"
 
             print(f"  {current_speaker.name}: {message}")
+
+            # 通过回调通知GUI（如果存在）
+            if self.message_callback:
+                try:
+                    self.message_callback(current_speaker.name, message, is_group=False)
+                except:
+                    pass  # 回调失败不影响对话
 
             # 记录记忆
             current_speaker.add_memory("assistant", message)
@@ -142,25 +157,32 @@ class AutoChatScheduler:
             speaker = random.choice(participants)
             others = [p for p in participants if p.id != speaker.id]
 
-            # 构建群聊上下文
+            # 构建群聊上下文（扩展：每个人最近10条）
             recent_messages = []
             for p in participants:
-                mems = p.memory[-3:]  # 每个人最近3条
+                mems = p.memory[-10:]  # 扩展上下文
                 for m in mems:
                     recent_messages.append((p.name, m['content']))
 
-            # 按时间排序（简化）
-            context = "\n".join([f"{name}: {msg}" for name, msg in recent_messages[-6:]])
+            # 取最近20条
+            context = "\n".join([f"{name}: {msg}" for name, msg in recent_messages[-20:]])
 
-            prompt = f"你在一个群聊中，参与对话的人有：{', '.join([p.name for p in participants])}\n\n最近对话：\n{context}\n\n请你说一句简短的话参与讨论："
+            prompt = f"你在一个群聊中，参与对话的人有：{', '.join([p.name for p in participants])}\n\n最近对话：\n{context}\n\n请你说一句简短的、符合性格的话参与讨论："
 
             try:
                 reply = self.api_client.generate_reply(speaker, prompt)
-                message = reply.get('reply', "（沉默）")[:80]
+                message = reply.get('reply', "（沉默）")[:150]
             except Exception as e:
                 message = f"（错误：{e}）"
 
             print(f"  {speaker.name}: {message}")
+
+            # 通过回调通知GUI（如果存在）
+            if self.message_callback:
+                try:
+                    self.message_callback(speaker.name, message, is_group=True)
+                except:
+                    pass
 
             # 所有人都记录这条消息
             for p in participants:
