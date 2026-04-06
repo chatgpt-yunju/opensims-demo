@@ -102,12 +102,11 @@ class MentorChatGUI:
         self.chat_display.tag_config("system", foreground="#9E9E9E", font=("Microsoft YaHei", 10, "italic"))
 
         # 底部输入区域
-        self.input_frame = tk.Frame(self.root, height=60)
-        self.input_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
-        self.input_frame.pack_propagate(False)
+        self.input_frame = tk.Frame(self.root, height=60, pady=5)
+        self.input_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=(0, 10))
 
         self.input_entry = tk.Entry(self.input_frame, font=("Microsoft YaHei", 11))
-        self.input_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.input_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         self.input_entry.bind("<Return>", lambda e: self.send_message())
 
         send_btn = tk.Button(
@@ -117,9 +116,9 @@ class MentorChatGUI:
             bg="#0078D4",
             fg="white",
             font=("Microsoft YaHei", 10, "bold"),
-            width=8
+            width=10
         )
-        send_btn.pack(side=tk.RIGHT, padx=(5, 0))
+        send_btn.pack(side=tk.RIGHT)
 
     def refresh_info(self):
         """更新顶部信息"""
