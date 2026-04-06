@@ -32,7 +32,9 @@ class OpenSimsDemo:
             self.agent_manager,
             self.api_client
         )
-        self.auto_chat_scheduler.start()  # 自动聊天调度
+        # 注意：auto_chat_scheduler 不再自动启动
+        # - CLI模式：需要在 run_cli 中根据配置启动
+        # - GUI模式：使用独立的自动聊天线程（gui_simple.py 中实现）
 
         # 玩家成长系统（延迟初始化，在加载角色后）
         self.player_growth: Optional[PlayerGrowth] = None
@@ -420,6 +422,13 @@ class OpenSimsDemo:
         print("=" * 60)
         print(f"OpenSims v{APP_VERSION} - 导师引导模式")
         print("=" * 60)
+
+        # 根据配置启动自动聊天调度器（CLI模式）
+        if AUTO_CHAT_ENABLED:
+            self.auto_chat_scheduler.start()
+            print("[系统] 自动聊天调度器已启动")
+        else:
+            print("[系统] 自动聊天调度器已禁用（配置中关闭）")
 
         # 加载或创建虚拟人
         vhs = self.agent_manager.list_virtual_humans()
