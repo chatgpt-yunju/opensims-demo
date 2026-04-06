@@ -73,7 +73,11 @@ class APIClient:
                 return {"reply": reply, "emotion": self._mood_from_friendliness(friendliness), "energy_delta": -2}
 
         # 对于复杂问题，使用多Agent协作式深度回复
-        if is_question and is_complex:
+        # 触发条件：是问题 且 (问题复杂 或 包含深度分析关键词)
+        deep_analysis_keywords = ["赚钱", "钱", "收入", "财", "工作", "职业", "找工作", "学习", "技能", "教育", "培训"]
+        has_deep_topic = any(k in user_input for k in deep_analysis_keywords)
+
+        if is_question and (is_complex or has_deep_topic):
             reply = self._generate_deep_analysis(vh, user_input, friendliness, humor, seriousness)
         else:
             # 简单回复（原有逻辑的简化版）
