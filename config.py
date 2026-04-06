@@ -3,7 +3,7 @@
 # API配置（默认值）
 API_ENDPOINT = "https://api.yunjunet.cn/v1/chat/completions"
 API_KEY = ""
-API_TIMEOUT = 30  # 秒
+API_TIMEOUT = 120  # 秒（增加以支持慢速流式响应）
 API_MODEL = "step-3.5-flash"
 USE_MOCK = False
 

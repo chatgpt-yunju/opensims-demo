@@ -27,10 +27,7 @@ class AutoChatScheduler:
 
     def start(self):
         """启动后台调度线程"""
-        if not AUTO_CHAT_ENABLED:
-            print("[AutoChat] 自动聊天已禁用（配置中关闭）")
-            return
-
+        # 不再检查 AUTO_CHAT_ENABLED，由调用方决定是否启动
         self.running = True
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
@@ -74,7 +71,8 @@ class AutoChatScheduler:
         # 30%概率触发群聊（3-5人）
         if random.random() < 0.3 and len(alive_vhs) >= 3:
             group_size = random.randint(3, min(5, len(alive_vhs)))
-            participants = random.sample(alive_vhs, group_size)
+            participant_dicts = random.sample(alive_vhs, group_size)
+            participants = [mgr.get_virtual_human(p["id"]) for p in participant_dicts]
             self._trigger_group_chat(participants)
         else:
             # 双人对话

@@ -415,10 +415,13 @@ class APIClient:
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                            if delta:
-                                reply_parts.append(delta)
-                                stream_callback(delta)
+                            choices = data.get("choices") or []
+                            if choices:
+                                delta = choices[0].get("delta", {}).get("content", "")
+                                if delta:
+                                    reply_parts.append(delta)
+                                    stream_callback(delta)
+                            # else: 省略空choices
                         except json.JSONDecodeError:
                             continue
 
@@ -441,7 +444,12 @@ class APIClient:
 
                 # 解析OpenAI格式响应
                 if "choices" in data and len(data["choices"]) > 0:
-                    reply = data["choices"][0]["message"]["content"].strip()
+                    message = data["choices"][0].get("message", {})
+                    content = message.get("content")
+                    if content is None:
+                        # 内容为空，视为异常，触发降级
+                        raise ValueError("API返回内容为空")
+                    reply = content.strip()
                 else:
                     raise ValueError("API响应格式错误：缺少choices")
 

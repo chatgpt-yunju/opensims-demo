@@ -109,6 +109,58 @@ class MentorChatGUI:
 
         dialog.wait_window()
 
+    def show_create_mentor_dialog(self):
+        """快速创建导师对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("创建新导师")
+        dialog.geometry("400x280")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        tk.Label(dialog, text="创建一位新的AI导师", font=("Arial", 10, "bold")).pack(pady=10)
+
+        # 昵称
+        tk.Label(dialog, text="导师昵称:").pack(anchor=tk.W, padx=20, pady=5)
+        name_entry = tk.Entry(dialog, width=30)
+        name_entry.pack(padx=20, pady=5)
+        name_entry.insert(0, "导师" + str(len(self.demo.agent_manager.virtual_humans) + 1))
+
+        # 性格
+        tk.Label(dialog, text="性格类型:").pack(anchor=tk.W, padx=20, pady=5)
+        from config import PERSONALITY_PRESETS
+        types = list(PERSONALITY_PRESETS.keys())
+        type_var = tk.StringVar(value=types[0])
+        type_combo = ttk.Combobox(dialog, textvariable=type_var, values=types, state="readonly", width=28)
+        type_combo.pack(padx=20, pady=5)
+
+        # 导师类型提示
+        tk.Label(dialog, text="导师类型将根据职业自动确定", fg="gray").pack(pady=5)
+
+        def on_create():
+            name = name_entry.get().strip()
+            if not name:
+                messagebox.showerror("错误", "请输入昵称")
+                return
+            ptype = type_var.get()
+            # 创建虚拟人
+            vh = self.demo.create_virtual_human(name, ptype, is_player=False)
+            # 标记为导师
+            vh.is_mentor = True
+            vh.mentor_type = vh._assign_mentor_type()
+            # 设为当前活跃
+            self.demo.select_virtual_human(vh.id)
+            dialog.destroy()
+            self.refresh_info()
+            self.add_system_message(f"✅ 新导师 {vh.name} ({vh.mentor_type}) 已创建并就位！")
+
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=15)
+        tk.Button(btn_frame, text="创建", command=on_create, bg="#4CAF50", fg="white", width=10).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+
+        name_entry.focus()
+        dialog.wait_window()
+
     def create_widgets(self):
         """创建界面组件"""
         # 顶部信息栏
@@ -207,12 +259,19 @@ class MentorChatGUI:
         self.input_frame = tk.Frame(self.root, height=60, pady=5)
         self.input_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=(0, 10))
 
-        self.input_entry = tk.Entry(self.input_frame, font=("Microsoft YaHei", 11))
+        # 输入模式切换：自由输入 / 选择问题
+        self.input_mode = tk.StringVar(value="free")  # free or select
+
+        # 自由输入模式（默认）
+        self.free_input_frame = tk.Frame(self.input_frame)
+        self.free_input_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.input_entry = tk.Entry(self.free_input_frame, font=("Microsoft YaHei", 11))
         self.input_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         self.input_entry.bind("<Return>", lambda e: self.send_message())
 
         send_btn = tk.Button(
-            self.input_frame,
+            self.free_input_frame,
             text="发送",
             command=self.send_message,
             bg="#0078D4",
@@ -221,6 +280,30 @@ class MentorChatGUI:
             width=10
         )
         send_btn.pack(side=tk.RIGHT)
+
+        # 选择问题模式（初始隐藏）
+        self.select_input_frame = tk.Frame(self.input_frame)
+        # 不pack，初始隐藏
+
+        # 模式切换按钮
+        mode_frame = tk.Frame(self.input_frame, width=80)
+        mode_frame.pack(side=tk.RIGHT, padx=(5, 0))
+
+        tk.Button(
+            mode_frame,
+            text="自由输入",
+            command=lambda: self.switch_input_mode("free"),
+            bg="#e0e0e0",
+            font=("Microsoft YaHei", 9)
+        ).pack(pady=2)
+
+        tk.Button(
+            mode_frame,
+            text="选择问题",
+            command=lambda: self.switch_input_mode("select"),
+            bg="#e0e0e0",
+            font=("Microsoft YaHei", 9)
+        ).pack(pady=2)
 
     def refresh_info(self):
         """更新顶部信息"""
@@ -513,7 +596,66 @@ class MentorChatGUI:
         self.root.after(0, lambda: self._set_auto_buttons_state(True))
         self.root.after(0, lambda: self.auto_status_label.config(text="已停止"))
         self.refresh_info()
-        # 可以加载历史消息（如果需要）
+
+    def switch_input_mode(self, mode):
+        """切换输入模式（自由输入/选择问题）"""
+        if mode == "free":
+            self.select_input_frame.pack_forget()
+            self.free_input_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            self.input_mode.set("free")
+            self.input_entry.focus()
+        else:  # select
+            self.free_input_frame.pack_forget()
+            self.select_input_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            self.input_mode.set("select")
+            self._create_select_buttons()
+
+    def _create_select_buttons(self):
+        """在选择模式下创建问题选项按钮"""
+        # 清空现有
+        for widget in self.select_input_frame.winfo_children():
+            widget.destroy()
+
+        # 预设问题列表
+        questions = [
+            "你好，请介绍一下你自己",
+            "我怎么才能赚钱？",
+            "我最近工作不顺利，该怎么办？",
+            "给我一些人生规划建议",
+            "如何提升自己的技能？",
+            "你觉得我应该转行吗？"
+        ]
+
+        # 创建滚动文本框显示问题
+        text = tk.Text(self.select_input_frame, height=4, font=("Microsoft YaHei", 10))
+        text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0, 5))
+        text.insert(tk.END, "选择问题：\n")
+        for i, q in enumerate(questions, 1):
+            text.insert(tk.END, f"{i}. {q}\n")
+        text.config(state=tk.DISABLED)
+
+        # 按钮区域
+        btn_frame = tk.Frame(self.select_input_frame)
+        btn_frame.pack(side=tk.BOTTOM)
+
+        for i, q in enumerate(questions, 1):
+            btn = tk.Button(
+                btn_frame,
+                text=f"{i}. {q[:20]}...",
+                command=lambda q=q: self.send_selected_question(q),
+                bg="#e0e0e0",
+                font=("Microsoft YaHei", 9),
+                anchor=tk.W
+            )
+            btn.pack(fill=tk.X, pady=2)
+
+    def send_selected_question(self, question):
+        """发送选择的问题"""
+        # 清空选择界面
+        self.switch_input_mode("free")
+        self.input_entry.delete(0, tk.END)
+        self.input_entry.insert(0, question)
+        self.send_message()
 
     def show_status(self):
         """显示当前导师状态"""
@@ -565,9 +707,16 @@ class MentorChatGUI:
         menubar.add_cascade(label="视图", menu=view_menu)
         view_menu.add_command(label="虚拟人对话监控", command=self.create_vh_monitor_window)
 
+        # 数据菜单
+        data_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="数据", menu=data_menu)
+        data_menu.add_command(label="查看虚拟人记忆...", command=self.show_memory_dialog)
+
         # 导师菜单（核心）
         mentor_menu = Menu(menubar, tearoff=0)
         menubar.add_cascade(label="导师", menu=mentor_menu)
+        mentor_menu.add_command(label="创建新导师...", command=self.show_create_mentor_dialog)
+        mentor_menu.add_separator()
         mentor_menu.add_command(label="查看导师状态", command=self.show_status)
         mentor_menu.add_command(label="导师列表", command=self.list_mentors)
         mentor_menu.add_separator()
@@ -778,6 +927,20 @@ class MentorChatGUI:
             self.vh_monitor_window.transient(self.root)
             self.vh_monitor_window.resizable(True, True)
 
+            # 顶部状态栏
+            status_frame = tk.Frame(self.vh_monitor_window, bg="#e0e0e0", height=25)
+            status_frame.pack(fill=tk.X, side=tk.TOP)
+            status_frame.pack_propagate(False)  # 固定高度
+
+            self.vh_count_label = tk.Label(
+                status_frame,
+                text="虚拟人数量: 计算中...",
+                bg="#e0e0e0",
+                anchor="w",
+                padx=10
+            )
+            self.vh_count_label.pack(side=tk.LEFT)
+
             # 文本框
             self.vh_monitor_text = scrolledtext.ScrolledText(
                 self.vh_monitor_window,
@@ -791,33 +954,139 @@ class MentorChatGUI:
 
             # 关闭时隐藏
             self.vh_monitor_window.protocol("WM_DELETE_WINDOW", self.on_close_monitor)
+
+            # 初始化状态标签
+            self._update_vh_count_label()
         else:
             self.vh_monitor_window.deiconify()
             self.vh_monitor_window.lift()
+            self._update_vh_count_label()  # 重新显示时更新计数
 
     def on_close_monitor(self):
         """关闭监控窗口（隐藏）"""
         if self.vh_monitor_window:
             self.vh_monitor_window.withdraw()
 
+    def _update_vh_count_label(self):
+        """更新虚拟人数量标签"""
+        if hasattr(self, 'vh_count_label') and self.vh_count_label:
+            try:
+                vhs = self.demo.agent_manager.virtual_humans.values() if self.demo.agent_manager else []
+                total = len(vhs)
+                from config import AUTO_CHAT_EXCLUDE_PLAYER
+                if AUTO_CHAT_EXCLUDE_PLAYER:
+                    eligible = sum(1 for v in vhs if not getattr(v, 'is_player', False))
+                else:
+                    eligible = total
+                self.vh_count_label.config(text=f"虚拟人总数: {total} (可互聊: {eligible})")
+            except Exception as e:
+                self.vh_count_label.config(text=f"数量错误: {e}")
+
     def on_virtual_chat_message(self, speaker_name: str, message: str, is_group: bool = False):
-        """处理虚拟人互聊消息（回调）"""
-        # 如果监控窗口未打开，自动创建并显示（可选）
-        if self.vh_monitor_window is None or not self.vh_monitor_window.winfo_exists():
-            self.create_vh_monitor_window()
+        """处理虚拟人互聊消息（回调）[线程安全]"""
+        def _update():
+            # 如果监控窗口未打开，自动创建并显示
+            if self.vh_monitor_window is None or not self.vh_monitor_window.winfo_exists():
+                self.create_vh_monitor_window()
+            if self.vh_monitor_text:
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                prefix = f"[{timestamp}] "
+                if is_group:
+                    prefix += "[群聊] "
+                prefix += f"{speaker_name}: "
+                self.vh_monitor_text.config(state=tk.NORMAL)
+                self.vh_monitor_text.insert(tk.END, prefix + message + "\n\n")
+                self.vh_monitor_text.see(tk.END)
+                self.vh_monitor_text.config(state=tk.DISABLED)
+        self.root.after(0, _update)
 
-        if self.vh_monitor_text:
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            prefix = f"[{timestamp}] "
-            if is_group:
-                prefix += "[群聊] "
-            prefix += f"{speaker_name}: "
+    def show_memory_dialog(self):
+        """查看虚拟人记忆（三层：用户、助手、系统）"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("虚拟人记忆查看器")
+        dialog.geometry("900x600")
+        dialog.transient(self.root)
+        dialog.grab_set()
 
-            self.vh_monitor_text.config(state=tk.NORMAL)
-            self.vh_monitor_text.insert(tk.END, prefix + message + "\n\n")
-            self.vh_monitor_text.see(tk.END)
-            self.vh_monitor_text.config(state=tk.DISABLED)
+        # 左侧：虚拟人列表
+        left_frame = ttk.Frame(dialog, width=250)
+        left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
+        left_frame.pack_propagate(False)
 
+        ttk.Label(left_frame, text="虚拟人列表:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
+
+        list_frame = ttk.Frame(left_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+
+        vh_listbox = tk.Listbox(list_frame, width=25, font=("Microsoft YaHei", 10))
+        vh_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        list_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=vh_listbox.yview)
+        list_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        vh_listbox.config(yscrollcommand=list_scrollbar.set)
+
+        # 右侧：Notebook 显示三层记忆
+        right_frame = ttk.Frame(dialog)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        notebook = ttk.Notebook(right_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
+
+        user_text = scrolledtext.ScrolledText(notebook, wrap=tk.WORD, font=("Microsoft YaHei", 10))
+        assistant_text = scrolledtext.ScrolledText(notebook, wrap=tk.WORD, font=("Microsoft YaHei", 10))
+        system_text = scrolledtext.ScrolledText(notebook, wrap=tk.WORD, font=("Microsoft YaHei", 10))
+
+        notebook.add(user_text, text="用户消息")
+        notebook.add(assistant_text, text="助手消息")
+        notebook.add(system_text, text="系统消息")
+
+        def load_memory(event=None):
+            idx = vh_listbox.curselection()
+            if not idx:
+                return
+            index = idx[0]
+            vh_ids = list(self.demo.agent_manager.virtual_humans.keys())
+            if index >= len(vh_ids):
+                return
+            vh_id = vh_ids[index]
+            vh = self.demo.agent_manager.get_virtual_human(vh_id)
+            if not vh:
+                return
+
+            for txt in (user_text, assistant_text, system_text):
+                txt.config(state=tk.NORMAL)
+                txt.delete(1.0, tk.END)
+                txt.config(state=tk.DISABLED)
+
+            for entry in vh.memory:
+                role = entry.get('role', '')
+                content = entry.get('content', '')
+                if role == 'user':
+                    target = user_text
+                elif role == 'assistant':
+                    target = assistant_text
+                else:
+                    target = system_text
+                target.config(state=tk.NORMAL)
+                target.insert(tk.END, content + "\n\n")
+                target.config(state=tk.DISABLED)
+
+        vh_listbox.bind('<<ListboxSelect>>', load_memory)
+
+        def refresh_list():
+            vh_listbox.delete(0, tk.END)
+            for vh in self.demo.agent_manager.virtual_humans.values():
+                label = vh.name
+                if vh.is_mentor:
+                    label += " [导师]"
+                if vh.is_player:
+                    label += " [玩家]"
+                vh_listbox.insert(tk.END, label)
+
+        refresh_btn = ttk.Button(left_frame, text="刷新列表", command=refresh_list)
+        refresh_btn.pack(pady=5)
+
+        refresh_list()
 
 if __name__ == "__main__":
     app = MentorChatGUI()
