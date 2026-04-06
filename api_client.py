@@ -17,18 +17,44 @@ except ImportError:
 class APIClient:
     """API客户端（支持OpenAI兼容格式和Mock降级）"""
 
-    def __init__(self):
-        self.endpoint = API_ENDPOINT
-        self.timeout = API_TIMEOUT
-        self.use_mock = USE_MOCK
+    def __init__(self, endpoint=None, api_key=None, model=None, use_mock=None):
+        """初始化APIClient
+
+        Args:
+            endpoint: API端点，None则使用config默认或环境变量
+            api_key: API密钥，None则使用config默认或环境变量
+            model: 模型名称，None则使用config默认
+            use_mock: 是否使用模拟模式，None则使用config默认
+        """
         # 从环境变量读取API密钥（支持多个变量名，按优先级）
-        # 1. ANTHROPIC_AUTH_TOKEN (用户提供的格式)
-        # 2. OPENSIMS_API_KEY (原始格式)
-        self.api_key = os.getenv("ANTHROPIC_AUTH_TOKEN", "") or os.getenv("OPENSIMS_API_KEY", "")
-        # 如果提供了ANTHROPIC_BASE_URL，覆盖配置的API_ENDPOINT
-        if os.getenv("ANTHROPIC_BASE_URL"):
-            self.endpoint = os.getenv("ANTHROPIC_BASE_URL").rstrip('/') + "/v1/chat/completions"
-        self.model = API_MODEL
+        env_key = os.getenv("ANTHROPIC_AUTH_TOKEN", "") or os.getenv("OPENSIMS_API_KEY", "")
+        env_base = os.getenv("ANTHROPIC_BASE_URL", "")
+
+        # 初始配置
+        self.endpoint = endpoint or (env_base.rstrip('/') + "/v1/chat/completions") if env_base else API_ENDPOINT
+        self.timeout = API_TIMEOUT
+        self.model = model or API_MODEL
+        self.use_mock = use_mock if use_mock is not None else USE_MOCK
+        self.api_key = api_key or env_key
+
+    def update_config(self, endpoint=None, api_key=None, model=None, use_mock=None):
+        """运行时更新配置（热更新）
+
+        Args:
+            endpoint: 新的API端点
+            api_key: 新的API密钥
+            model: 新的模型名称
+            use_mock: 新的模拟模式开关
+        """
+        if endpoint is not None:
+            self.endpoint = endpoint
+        if api_key is not None:
+            self.api_key = api_key
+        if model is not None:
+            self.model = model
+        if use_mock is not None:
+            self.use_mock = use_mock
+        print(f"[APIClient] 配置已更新: endpoint={self.endpoint}, model={self.model}, use_mock={self.use_mock}")
 
     def generate_reply(self, vh: SimPerson, user_input: str, stream_callback=None) -> Dict:
         """生成回复（Mock或真实API）

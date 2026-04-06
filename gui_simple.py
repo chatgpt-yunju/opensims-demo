@@ -647,13 +647,9 @@ class MentorChatGUI:
         rounds_spinbox = ttk.Spinbox(form_frame, from_=1, to=100, textvariable=rounds_var, width=10)
         rounds_spinbox.grid(row=6, column=1, sticky=tk.W, pady=5, padx=(10, 0))
 
-        # Warning label
-        warning_label = ttk.Label(form_frame, text="注意：修改设置后需要重启应用以生效", foreground="orange")
-        warning_label.grid(row=7, column=0, columnspan=2, pady=20)
-
         # Buttons
         btn_frame = ttk.Frame(form_frame)
-        btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=7, column=0, columnspan=2, pady=10)
 
         def on_save():
             new_settings = {
@@ -662,7 +658,8 @@ class MentorChatGUI:
                 "model": model_var.get().strip(),
                 "use_mock": use_mock_var.get(),
                 "auto_chat_enabled": auto_chat_var.get(),
-                "auto_chat_rounds": rounds_var.get()
+                "auto_chat_rounds": rounds_var.get(),
+                "auto_chat_interval": self.auto_interval_var.get()  # 从主界面控件获取
             }
             # 验证
             if not new_settings["api_endpoint"]:
@@ -673,14 +670,34 @@ class MentorChatGUI:
                 return
             try:
                 rounds = int(new_settings["auto_chat_rounds"])
-                if rounds < 1:
+                interval = int(new_settings["auto_chat_interval"])
+                if rounds < 1 or interval < 5:
                     raise ValueError
             except:
-                messagebox.showerror("错误", "自动对话轮数必须是正整数")
+                messagebox.showerror("错误", "轮数必须≥1，间隔必须≥5秒")
                 return
 
             if gui_settings.save_settings(new_settings):
-                messagebox.showinfo("成功", "设置已保存！\n请重启应用以应用更改。")
+                # 热更新APIClient配置（无需重启）
+                self.demo.api_client.update_config(
+                    endpoint=new_settings["api_endpoint"],
+                    api_key=new_settings["api_key"],
+                    model=new_settings["model"],
+                    use_mock=new_settings["use_mock"]
+                )
+                # 同步自动聊天设置到控制面板
+                self.auto_rounds_var.set(new_settings["auto_chat_rounds"])
+                self.auto_interval_var.set(new_settings["auto_chat_interval"])
+
+                # 根据设置的状态自动启停
+                if new_settings["auto_chat_enabled"]:
+                    if not (self.auto_chat_thread and self.auto_chat_thread.is_alive()):
+                        self.start_auto_chat_manual()
+                else:
+                    if self.auto_chat_thread and self.auto_chat_thread.is_alive():
+                        self.stop_auto_chat_manual()
+
+                messagebox.showinfo("成功", "设置已保存并应用！")
                 dialog.destroy()
             else:
                 messagebox.showerror("错误", "保存设置失败")

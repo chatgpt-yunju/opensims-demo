@@ -1,37 +1,11 @@
 # OpenSims Demo Configuration
-import os
-import sys
 
-# 尝试从 settings.json 加载配置（优先于默认值）
-def _load_settings():
-    """动态加载 settings 模块（支持PyInstaller打包环境）"""
-    try:
-        # 方法1：直接导入（开发环境）
-        import settings
-        return settings.load_settings()
-    except ImportError:
-        try:
-            # 方法2：从当前目录导入（打包环境）
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) or '.')
-            import settings as _settings
-            return _settings.load_settings()
-        except Exception as e:
-            print(f"[Config] 无法加载settings: {e}")
-            return None
-
-_settings_data = _load_settings()
-if _settings_data:
-    API_ENDPOINT = _settings_data.get("api_endpoint", "https://api.yunjunet.cn/v1/chat/completions")
-    API_KEY = _settings_data.get("api_key", "")
-    API_MODEL = _settings_data.get("model", "step-3.5-flash")
-    USE_MOCK = _settings_data.get("use_mock", False)
-else:
-    API_ENDPOINT = "https://api.yunjunet.cn/v1/chat/completions"
-    API_KEY = ""
-    API_MODEL = "step-3.5-flash"
-    USE_MOCK = False
-
+# API配置（默认值）
+API_ENDPOINT = "https://api.yunjunet.cn/v1/chat/completions"
+API_KEY = ""
 API_TIMEOUT = 30  # 秒
+API_MODEL = "step-3.5-flash"
+USE_MOCK = False
 
 # 性格预设
 PERSONALITY_PRESETS = {
@@ -44,22 +18,16 @@ PERSONALITY_PRESETS = {
 # 数据文件路径
 DATA_FILE = "demo_data.json"
 
-# ===== 新增：多虚拟人与自动聊天设置 =====
-# 是否启用自动聊天（虚拟人之间自动对话）
-AUTO_CHAT_ENABLED = False  # 默认关闭，需要手动开启
-AUTO_CHAT_INTERVAL = 30    # 自动对话间隔（秒）
-AUTO_CHAT_PROBABILITY = 0.3  # 每次心跳触发对话的概率（0-1）
+# 自动聊天配置（CLI模式使用）
+AUTO_CHAT_ENABLED = False
+AUTO_CHAT_INTERVAL = 30
+AUTO_CHAT_PROBABILITY = 0.3
+AUTO_CHAT_EXCLUDE_PLAYER = True
 
-# 最大虚拟人数量（防止资源耗尽）
+# 最大虚拟人数量
 MAX_VIRTUAL_HUMANS = 10
 
-# ===== 模拟人生游戏系统配置 =====
-# 自动聊天开关（灵魂永生模式）
-AUTO_CHAT_ENABLED = True   # 开启自动聊天（虚拟人之间自主对话）
-AUTO_CHAT_INTERVAL = 30    # 自动对话检查间隔（秒）
-AUTO_CHAT_PROBABILITY = 0.5  # 每次检查触发对话的概率（0-1）
-
-# 人生阶段定义（按年龄）
+# 人生阶段定义
 LIFE_STAGES = {
     "baby": {"min_age": 0, "max_age": 3, "default_job": "婴儿"},
     "toddler": {"min_age": 3, "max_age": 6, "default_job": "幼儿"},
@@ -75,16 +43,13 @@ LIFE_STAGES = {
 PROFESSIONS = [
     "上班族", "程序员", "主播", "画家", "外卖员",
     "教师", "医生", "律师", "工程师", "自由职业",
-    "小红书博主",  # 新增：内容创作者
-    "贵人"  # 新增：人生导师型职业
+    "小红书博主",
+    "贵人"
 ]
 
 # 游戏参数
-DAY_ACTIONS_LIMIT = 999      # 每天行动次数限制（灵魂永生：无限次）
-
-# 自动聊天配置
-AUTO_CHAT_EXCLUDE_PLAYER = True  # 自动聊天是否排除玩家角色
-ACTION_TIME_COST = {         # 行动消耗天数
+DAY_ACTIONS_LIMIT = 999
+ACTION_TIME_COST = {
     "eat": 0.1,
     "sleep": 0.2,
     "work": 0.3,
@@ -94,7 +59,7 @@ ACTION_TIME_COST = {         # 行动消耗天数
     "shop": 0.2
 }
 
-# 状态自然衰减（每天）
+# 状态自然衰减
 NATURAL_DECAY = {
     "hunger": -10,
     "energy": -5,
@@ -102,23 +67,20 @@ NATURAL_DECAY = {
     "fun": -5
 }
 
-# ===== 小红书博主配置 =====
-# 小红书平台参数
+# 小红书博主配置
 XIAOHONGSHU_CONFIG = {
-    "max_tags": 5,                    # 最多标签数
-    "max_title_length": 20,           # 标题最大长度
-    "max_content_length": 1000,       # 正文最大长度
-    "base_followers": 100,            # 初始粉丝数
-    "base_engagement_rate": 0.02,     # 基础互动率（2%）
-    "hot_probability": 0.05,          # 爆款概率（5%）
-    "income_per_1000_views": 10,      # 每千次阅读收入（元）
-    # 官方API配置（可选，如不配置则使用模拟模式）
-    "api_enabled": False,             # 是否启用官方API
-    "app_id": "",                     # 小红书开放平台App ID
-    "app_secret": "",                 # App Secret
-    "access_token": "",               # 用户授权Access Token
-    "api_endpoint": "https://api.xiaohongshu.com/api/gxapi/",  # API端点
-    # Playwright自动化配置
-    "playwright_cookie_file": "xhs_cookies.txt",  # cookie文件路径
-    "playwright_headless": True,      # 是否无头模式运行
+    "max_tags": 5,
+    "max_title_length": 20,
+    "max_content_length": 1000,
+    "base_followers": 100,
+    "base_engagement_rate": 0.02,
+    "hot_probability": 0.05,
+    "income_per_1000_views": 10,
+    "api_enabled": False,
+    "app_id": "",
+    "app_secret": "",
+    "access_token": "",
+    "api_endpoint": "https://api.xiaohongshu.com/api/gxapi/",
+    "playwright_cookie_file": "xhs_cookies.txt",
+    "playwright_headless": True,
 }
