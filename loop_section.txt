@@ -1,0 +1,173 @@
+        # 主游戏循环
+        while True:
+            vh = self.agent_manager.get_active()
+            if not vh:
+                print("[系统] 没有活跃角色，请先创建")
+                break
+
+            if not vh.alive:
+                print(f"\n{'='*60}")
+                print(f"⚠️  {vh.name} 已经去世！")
+                print(f"   享年 {vh.age:.1f} 岁")
+                if vh.death_cause:
+                    print(f"   死因: {vh.death_cause}")
+                print(f"   累计活了 {vh.day_counter:.0f} 天")
+                print(f"{'='*60}")
+                print("\n1. 查看遗言（状态）  2. 复活（作弊）  3. 退出")
+                choice = input("请选择: ").strip()
+                if choice == "1":
+                    self.show_status(vh)
+                elif choice == "2":
+                    vh.alive = True
+                    vh.health = 100
+                    vh.age = max(0, vh.age - 10)  # 年轻10岁
+                    print(f"✨ {vh.name} 复活了！年龄重置为 {vh.age:.1f} 岁")
+                else:
+                    break
+                continue
+
+            # 显示状态
+            print("\n" + "=" * 60)
+            print(f"    第 {vh.day_counter:.0f} 天   {vh.name}  [{vh.stage}]")
+            print("=" * 60)
+            print(vh.get_status_full())
+            print("-" * 60)
+
+            # 显示选项 - 导师引导为核心
+            print("\n" + "=" * 60)
+            print("  主菜单（导师引导优先）")
+            print("=" * 60)
+            print("  1. 💬 与导师对话（当前角色）")
+            print("  2. 📊 查看成长日志")
+            print("  3. 👥 查看所有角色")
+            print("  4. 🔄 切换角色")
+            print("  5. ➕ 创建AI角色")
+            print("  6. ⏳ 结束今天")
+            print("  7. ⚙️  更多选项")
+            print("  8. 🚪 退出")
+            print("-" * 60)
+
+            # 显示导师提示（如果有）
+            mentors = [vh for vh in self.agent_manager.virtual_humans.values()
+                      if getattr(vh, 'is_mentor', False)]
+            if mentors:
+                print(f"[导师提醒] 你有 {len(mentors)} 位导师陪伴：")
+                for m in mentors:
+                    rel = m.get_relationship_with_player()
+                    print(f"  - {m.name} (关系: {rel:.0f})")
+                print("-" * 60)
+
+            choice = input("请选择 (1-8): ").strip()
+
+            if choice == "1":
+                print(f"  >> {vh.name} {self.sim_eat()}")
+            elif choice == "2":
+                print(f"  >> {vh.name} {self.sim_sleep()}")
+            elif choice == "3":
+                print(f"  >> {vh.name} {self.sim_work()}")
+            elif choice == "4":
+                print(f"  >> {vh.name} {self.sim_find_job()}")
+            elif choice == "5":
+                print(f"  >> {vh.name} {self.sim_relax()}")
+            elif choice == "6":
+                target = input("  和谁社交？（留空随机）: ").strip()
+                if target:
+                    print(f"  >> {vh.name} {self.sim_socialize()} {target}")
+                else:
+                    print(f"  >> {vh.name} {self.sim_socialize()}")
+            elif choice == "7":
+                print(f"  >> {vh.name} {self.sim_shop()}")
+            elif choice == "8":
+                # 小红书发布
+                if vh.job != "小红书博主":
+                    print(f"  注意：{vh.name} 当前职业是 {vh.job}，不是小红书博主")
+                    confirm = input("  是否要发布小红书笔记？（仍会执行，但效果可能不佳）(y/N): ").strip().lower()
+                    if confirm != 'y':
+                        continue
+                print(f"  >> {vh.name} 正在撰写小红书笔记...")
+                result = self.sim_create_xiaohongshu_post()
+                print(f"  {result}")
+            elif choice == "9":
+                # 聊天（当前角色）
+                msg = input("  你想对虚拟人说什么？: ").strip()
+                if msg:
+                    reply = self.chat(msg)
+                    print(f"    {vh.name}: {reply[:80]}")
+            elif choice == "10":
+                # 指挥其他虚拟人聊天
+                vhs = self.agent_manager.list_virtual_humans()
+                if len(vhs) <= 1:
+                    print("  还没有其他虚拟人，先创建一个吧！")
+                    continue
+                print("  选择对话对象：")
+                for v in vhs:
+                    if v["id"] != vh.id:
+                        print(f"    {v['id']}: {v['name']} ({v['stage']}, {v['job']})")
+                target_id = input("  输入ID: ").strip()
+                if target_id:
+                    msg = input(f"  你想对{v.get('name','?')}说什么？: ").strip()
+                    if msg:
+                        reply = self.chat_with_vh(target_id, msg)
+                        print(f"    {vh.name}: {reply[:80]}")
+            elif choice == "11":
+                # 群聊模式（选择多个角色一起聊天）
+                vhs = self.agent_manager.list_virtual_humans()
+                if len(vhs) < 3:
+                    print("  需要至少3个虚拟人才能群聊")
+                    continue
+                print("  选择群聊参与者（用逗号分隔ID，至少2人）:")
+                for v in vhs:
+                    if v["id"] != vh.id:
+                        print(f"    {v['id']}: {v['name']} ({v['stage']}, {v['job']})")
+                ids_input = input("  输入ID（例如: abc,def,ghi）: ").strip()
+                if ids_input:
+                    ids = [i.strip() for i in ids_input.split(',') if i.strip()]
+                    if len(ids) >= 2:
+                        print(f"\n  [{vh.name}] 发起群聊，参与人数: {len(ids)+1}")
+                        # 模拟群聊（轮流说话）
+                        participants = [vh] + [self.agent_manager.get_virtual_human(pid) for pid in ids]
+                        participants = [p for p in participants if p]
+                        if len(participants) >= 3:
+                            self._simulate_group_chat(participants)
+                        else:
+                            print("  选择的参与者无效")
+            elif choice == "12":
+                result = self.sim_day_pass()
+                print(f"  >> {result}")
+            elif choice == "13":
+                vhs = self.agent_manager.list_virtual_humans()
+                if not vhs:
+                    print("  还没有任何虚拟人！")
+                else:
+                    print("  所有虚拟人：")
+                    for v in vhs:
+                        active_mark = " [当前]" if v["is_active"] else ""
+                        player_mark = " [玩家]" if v.get('is_player', False) else ""
+                        alive_mark = "" if v.get('alive', True) else " 💀[已去世]"
+                        print(f"    {v['id']}: {v['name']}{player_mark}{active_mark}{alive_mark}")
+                        if v.get('alive', True):
+                            print(f"      年龄: {v.get('age', '?'):.1f}, 职业: {v.get('job', '?')}, 金钱: ${v.get('money', '?')}")
+                        else:
+                            print(f"      享年: {v.get('age','?'):.1f}岁, 死因: {v.get('death_cause','?')}")
+            elif choice == "14":
+                vhs = self.agent_manager.list_virtual_humans()
+                if not vhs:
+                    print("  还没有任何虚拟人！")
+                else:
+                    print("  当前角色列表：")
+                    for v in vhs:
+                        active_mark = " [当前]" if v["is_active"] else ""
+                        player_mark = " [玩家]" if v.get('is_player', False) else ""
+                        print(f"    {v['id']}: {v['name']}{player_mark}{active_mark}")
+                    switch = input("  输入ID切换角色: ").strip()
+                    if switch:
+                        self.select_virtual_human(switch)
+            elif choice == "15":
+                self.show_guidance_log()
+            elif choice == "16" or choice.lower() in ['quit', 'exit', 'q']:
+                print("再见！期待下次人生旅程。")
+                # 停止自动聊天调度器
+                self.auto_chat_scheduler.stop()
+                break
+            else:
+                print("无效选择")
