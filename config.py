@@ -7,7 +7,7 @@ API_TIMEOUT = 30  # 秒
 API_MODEL = "step-3.5-flash"  # 云君网络模型
 
 # 是否使用Mock模式（如果没有API，设为True）
-USE_MOCK = True  # 默认True，配置API_KEY后改为False
+USE_MOCK = False  # 使用真实API（需要配置API_KEY）
 
 # 性格预设
 PERSONALITY_PRESETS = {
