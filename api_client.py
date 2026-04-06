@@ -1,4 +1,5 @@
 import os
+import uuid  # 用于生成会话ID
 import requests
 import random
 from typing import Dict
@@ -12,8 +13,13 @@ class APIClient:
         self.endpoint = API_ENDPOINT
         self.timeout = API_TIMEOUT
         self.use_mock = USE_MOCK
-        # 从环境变量读取API密钥（优先级高于配置文件）
-        self.api_key = os.getenv("OPENSIMS_API_KEY", "")
+        # 从环境变量读取API密钥（支持多个变量名，按优先级）
+        # 1. ANTHROPIC_AUTH_TOKEN (用户提供的格式)
+        # 2. OPENSIMS_API_KEY (原始格式)
+        self.api_key = os.getenv("ANTHROPIC_AUTH_TOKEN", "") or os.getenv("OPENSIMS_API_KEY", "")
+        # 如果提供了ANTHROPIC_BASE_URL，覆盖配置的API_ENDPOINT
+        if os.getenv("ANTHROPIC_BASE_URL"):
+            self.endpoint = os.getenv("ANTHROPIC_BASE_URL").rstrip('/') + "/v1/chat/completions"
         self.model = API_MODEL
 
     def generate_reply(self, vh: SimPerson, user_input: str) -> Dict:
