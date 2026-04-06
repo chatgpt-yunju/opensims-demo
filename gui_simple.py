@@ -301,8 +301,12 @@ class MentorChatGUI:
             self.auto_interval_var.set(interval)
             # 启动自动聊天
             self._start_auto_chat_thread(rounds, interval)
+            # 更新按钮状态
+            self._set_auto_buttons_state(False)
+            self.auto_status_label.config(text=f"已启用，剩余{rounds}轮")
         else:
             self.auto_status_label.config(text="就绪")
+            self._set_auto_buttons_state(True)
 
     def start_auto_chat_manual(self):
         """手动开启自动聊天（按钮点击）"""
