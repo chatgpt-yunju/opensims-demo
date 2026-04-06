@@ -30,13 +30,62 @@ cd G:/opensims_demo
 pip install -r requirements.txt
 ```
 
-### 2. 运行游戏（CLI）
+### 2. 获取 API Key
+
+访问 [api.yunjunet.cn](https://api.yunjunet.cn) 注册并获取 API Key。
+
+### 3. 配置API
+
+配置方式（任选其一）：
+
+**方式A：GUI设置（推荐）**
+- 运行GUI程序
+- 点击顶部 "⚙️ 设置" 按钮
+- 填写 API Key 和模型名称（默认 `step-3.5-flash`）
+- 保存后重启
+
+**方式B：编辑配置文件**
+```bash
+# 编辑 settings.json（首次运行自动生成）
+{
+  "api_endpoint": "https://api.yunjunet.cn/v1/chat/completions",
+  "api_key": "你的API_KEY",
+  "model": "step-3.5-flash",
+  "use_mock": false,
+  "auto_chat_enabled": false,
+  "auto_chat_rounds": 10,
+  "auto_chat_interval": 30
+}
+```
+
+**方式C：环境变量**
+```bash
+# 创建 .env 文件（gitignored）
+ANTHROPIC_AUTH_TOKEN=your_api_key_here
+ANTHROPIC_BASE_URL=https://api.yunjunet.cn
+```
+
+**离线测试**：在设置中将 `use_mock` 设为 `true`，或勾选"使用模拟模式"。
+
+### 3. 运行GUI对话模式
+
+```bash
+python gui_simple.py
+```
+
+**GUI功能：**
+- 💬 **导师对话**：与AI导师实时交流，流式输出（打字效果）
+- ⚙️ **设置面板**：自定义API端点、模型、模拟模式
+- 🔄 **自动对话**：主界面直接设置轮数/间隔，一键开启/停止
+- 📝 **即时配置**：无需重启，设置后立即生效（除API端点/模型外）
+
+### 4. 运行游戏（CLI）
 
 ```bash
 python main.py
 ```
 
-### 3. 体验模拟人生
+### 5. 体验模拟人生
 
 ```
 ============================================================
@@ -545,15 +594,19 @@ opensims_demo/
 │   └── manager.py          # 多虚拟人管理
 ├── auto_chat_scheduler.py  # 自动聊天调度器
 ├── virtual_human.py        # SimPerson核心类（模拟人生）
-├── api_client.py           # API客户端（OpenAI兼容）
+├── human_like_chat.py      # Human-like Chat System（6大特质）
+├── api_client.py           # API客户端（OpenAI兼容，流式支持）
 ├── xhs_api.py              # 小红书开放平台API客户端
 ├── storage.py              # JSON持久化
-├── config.py               # 配置文件
+├── settings.py             # 设置管理（GUI配置）
+├── config.py               # 配置文件（从settings.json读取）
 ├── main.py                 # CLI主程序（游戏入口）
+├── gui_simple.py           # GUI对话模式（极简界面）
 ├── web_api.py              # HTTP API服务器（FastAPI）
 ├── openclaw_cli.py         # CLI命令封装（待实现）
 ├── openclaw_service.py     # Windows服务（待实现）
 ├── test_*.py               # 测试文件
+├── settings.json           # 用户配置（gitignored）
 ├── requirements.txt        # 基础依赖
 ├── requirements_mcp.txt    # MCP插件依赖
 ├── mcp_xhs.py              # 小红书MCP服务器（Claude Desktop插件）

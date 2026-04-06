@@ -1,5 +1,6 @@
 import os
 import uuid  # 用于生成会话ID
+import json
 import requests
 import random
 from typing import Dict
@@ -29,23 +30,34 @@ class APIClient:
             self.endpoint = os.getenv("ANTHROPIC_BASE_URL").rstrip('/') + "/v1/chat/completions"
         self.model = API_MODEL
 
-    def generate_reply(self, vh: SimPerson, user_input: str) -> Dict:
-        """生成回复（Mock或真实API）"""
+    def generate_reply(self, vh: SimPerson, user_input: str, stream_callback=None) -> Dict:
+        """生成回复（Mock或真实API）
+
+        Args:
+            vh: 虚拟人实例
+            user_input: 用户输入
+            stream_callback: 流式回调函数，接收文本片段；如果为None则返回完整回复
+
+        Returns:
+            包含 reply, emotion, energy_delta 的字典（仅当 stream_callback 为None时有效）
+        """
         # 如果配置为Mock mode或未配置API密钥，使用Mock
         if self.use_mock or not self.api_key:
-            response = self._mock_generate(vh, user_input)
+            response = self._mock_generate(vh, user_input, stream_callback)
         else:
-            response = self._api_generate(vh, user_input)
+            response = self._api_generate(vh, user_input, stream_callback)
 
-        # Human-like Chat 增强：应用6个真人特征
+        # 如果使用了流式回调，直接返回 None（结果已通过回调处理）
+        if stream_callback:
+            return None
+
+        # Human-like Chat 增强：应用6个真人特征（仅对完整回复）
         if hasattr(vh, 'human_like_chat'):
-            # 构造当前状态（从 vh.state 中读取）
             vh_state = {
                 "energy": vh.state.get("energy", 100),
-                "mood": vh.state.get("mood", "普通"),
+                "mood": vh.state.get("mood", "���通"),
                 "relationship": vh.state.get("relationship", 0)
             }
-            # 额外状态
             extra_state = {
                 "hunger": getattr(vh, 'hunger', 60),
                 "health": getattr(vh, 'health', 100),
@@ -61,7 +73,7 @@ class APIClient:
 
         return response
 
-    def _mock_generate(self, vh: SimPerson, user_input: str) -> Dict:
+    def _mock_generate(self, vh: SimPerson, user_input: str, stream_callback=None) -> Dict:
         """Mock回复引擎（无需API）- 模拟多Agent深度分析"""
         friendliness = vh.personality.get("friendliness", 0.5)
         humor = vh.personality.get("humor", 0.5)
@@ -83,18 +95,28 @@ class APIClient:
         for keyword, options in simple_responses.items():
             if keyword in user_input:
                 reply = random.choice(options)
+                if stream_callback:
+                    for ch in reply:
+                        stream_callback(ch)
+                    return None
                 return {"reply": reply, "emotion": self._mood_from_friendliness(friendliness), "energy_delta": -2}
 
         # 对于复杂问题，使用多Agent协作式深度回复
-        # 触发条件：是问题 且 (问题复杂 或 包含深度分析关键词)
         deep_analysis_keywords = ["赚钱", "钱", "收入", "财", "工作", "职业", "找工作", "学习", "技能", "教育", "培训"]
         has_deep_topic = any(k in user_input for k in deep_analysis_keywords)
 
         if is_question and (is_complex or has_deep_topic):
             reply = self._generate_deep_analysis(vh, user_input, friendliness, humor, seriousness)
         else:
-            # 简单回复（原有逻辑的简化版）
             reply = self._simple_reply(user_input, friendliness, humor)
+
+        if stream_callback:
+            # 模拟流式输出 - 逐字符或逐词发送
+            import time
+            for ch in reply:
+                stream_callback(ch)
+                time.sleep(0.01)  # 模拟打字速度
+            return None
 
         return {"reply": reply, "emotion": self._mood_from_friendliness(friendliness), "energy_delta": -random.randint(1, 3)}
 
@@ -291,7 +313,7 @@ class APIClient:
         else:
             return "neutral"
 
-    def _api_generate(self, vh: SimPerson, user_input: str) -> Dict:
+    def _api_generate(self, vh: SimPerson, user_input: str, stream_callback=None) -> Dict:
         """调用OpenAI兼容API"""
         # 会话管理：确保每个对话有唯一会话ID
         session_id = getattr(vh, 'current_session_id', None)
@@ -335,7 +357,8 @@ class APIClient:
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 500
+            "max_tokens": 500,
+            "stream": stream_callback is not None  # 仅当需要流式时启用
         }
 
         headers = {
@@ -344,31 +367,68 @@ class APIClient:
         }
 
         try:
-            resp = requests.post(
-                self.endpoint,
-                json=payload,
-                headers=headers,
-                timeout=self.timeout
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            if stream_callback:
+                # 流式模式
+                resp = requests.post(
+                    self.endpoint,
+                    json=payload,
+                    headers=headers,
+                    timeout=self.timeout,
+                    stream=True
+                )
+                resp.raise_for_status()
 
-            # 解析OpenAI格式响应
-            if "choices" in data and len(data["choices"]) > 0:
-                reply = data["choices"][0]["message"]["content"].strip()
+                reply_parts = []
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    line = line.decode('utf-8', errors='ignore')
+                    if line.startswith('data: '):
+                        data_str = line[6:]  # 去掉 "data: " 前缀
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                            if delta:
+                                reply_parts.append(delta)
+                                stream_callback(delta)
+                        except json.JSONDecodeError:
+                            continue
+
+                reply = "".join(reply_parts).strip()
+                return {
+                    "reply": reply,
+                    "emotion": vh.state["mood"],
+                    "energy_delta": -2
+                }
             else:
-                raise ValueError("API响应格式错误：缺少choices")
+                # 非流式模式（原有逻辑）
+                resp = requests.post(
+                    self.endpoint,
+                    json=payload,
+                    headers=headers,
+                    timeout=self.timeout
+                )
+                resp.raise_for_status()
+                data = resp.json()
 
-            return {
-                "reply": reply,
-                "emotion": vh.state["mood"],  # 暂不更新，保持原情绪
-                "energy_delta": -2
-            }
+                # 解析OpenAI格式响应
+                if "choices" in data and len(data["choices"]) > 0:
+                    reply = data["choices"][0]["message"]["content"].strip()
+                else:
+                    raise ValueError("API响应格式错误：缺少choices")
+
+                return {
+                    "reply": reply,
+                    "emotion": vh.state["mood"],
+                    "energy_delta": -2
+                }
         except requests.RequestException as e:
             print(f"[APIClient] API调用失败: {e}")
             # 降级到Mock模式
             print("[APIClient] 降级到Mock回复")
-            return self._mock_generate(vh, user_input)
+            return self._mock_generate(vh, user_input, stream_callback)
         except Exception as e:
             print(f"[APIClient] 解析响应失败: {e}")
-            return self._mock_generate(vh, user_input)
+            return self._mock_generate(vh, user_input, stream_callback)

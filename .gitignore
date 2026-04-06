@@ -40,6 +40,7 @@ secrets.json
 # Data files - 不追踪（自动生成）
 demo_data.json
 *_data.json
+settings.json
 *_content_*.txt
 juejin_*.json
 juejin_*.txt

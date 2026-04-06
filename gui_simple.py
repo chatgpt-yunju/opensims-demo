@@ -1,8 +1,20 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext, Menu
+from tkinter import ttk, scrolledtext, Menu, messagebox
 from main import OpenSimsDemo
 import threading
 import time
+import sys
+import os
+
+# 动态导入 settings（支持PyInstaller）
+try:
+    import settings as gui_settings
+except ImportError:
+    # 添加当前目录到路径并重试
+    current_dir = os.path.dirname(os.path.abspath(__file__)) or '.'
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    import settings as gui_settings
 
 class MentorChatGUI:
     """极简导师对话GUI - 只保留核心对话功能"""
@@ -13,6 +25,11 @@ class MentorChatGUI:
         self.root.title("OpenSims - 导师对话")
         self.root.geometry("700x500")
         self.root.resizable(True, True)
+
+        # 自动聊天控制
+        self.auto_chat_thread = None
+        self.auto_chat_stop = threading.Event()
+        self.auto_chat_remaining = 0
 
         # 构建界面（必须先创建控件，setup_system会用到chat_display）
         self.create_widgets()
@@ -25,6 +42,9 @@ class MentorChatGUI:
 
         # 自动聚焦输入框
         self.input_entry.focus()
+
+        # 启动自动聊天（如果设置中启用）
+        self.start_auto_chat_if_enabled()
 
     def setup_system(self):
         """初始化系统"""
@@ -80,8 +100,22 @@ class MentorChatGUI:
         # 顶部信息栏
         self.info_frame = tk.Frame(self.root, bg="#f0f0f0", height=30)
         self.info_frame.pack(fill=tk.X, side=tk.TOP)
+
+        # 左侧信息标签
         self.info_label = tk.Label(self.info_frame, text="就绪", bg="#f0f0f0", anchor="w", padx=10)
-        self.info_label.pack(fill=tk.X)
+        self.info_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 右侧设置按钮
+        settings_btn = tk.Button(
+            self.info_frame,
+            text="⚙️ 设置",
+            command=self.show_settings_dialog,
+            bg="#e0e0e0",
+            font=("Microsoft YaHei", 9),
+            width=8,
+            relief=tk.FLAT
+        )
+        settings_btn.pack(side=tk.RIGHT, padx=(0, 10), pady=5)
 
         # 聊天显示区域
         self.chat_frame = tk.Frame(self.root)
@@ -100,6 +134,60 @@ class MentorChatGUI:
         self.chat_display.tag_config("user", foreground="#0078D4", font=("Microsoft YaHei", 11, "bold"))
         self.chat_display.tag_config("assistant", foreground="#2E7D32", font=("Microsoft YaHei", 11))
         self.chat_display.tag_config("system", foreground="#9E9E9E", font=("Microsoft YaHei", 10, "italic"))
+
+        # 自动聊天控制面板
+        self.auto_chat_frame = tk.Frame(self.root, bg="#f5f5f5", height=50)
+        self.auto_chat_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=(0, 5))
+        self.auto_chat_frame.pack_propagate(False)
+
+        # 左侧：控制选项
+        control_frame = tk.Frame(self.auto_chat_frame, bg="#f5f5f5")
+        control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(5, 0))
+
+        tk.Label(control_frame, text="自动对话:", bg="#f5f5f5", font=("Microsoft YaHei", 9)).pack(side=tk.LEFT, padx=(0, 5))
+
+        # 轮数设置
+        tk.Label(control_frame, text="轮数:", bg="#f5f5f5", font=("Microsoft YaHei", 9)).pack(side=tk.LEFT, padx=(5, 2))
+        self.auto_rounds_var = tk.IntVar(value=10)
+        rounds_spin = tk.Spinbox(control_frame, from_=1, to=100, textvariable=self.auto_rounds_var, width=5, font=("Microsoft YaHei", 9))
+        rounds_spin.pack(side=tk.LEFT, padx=(0, 10))
+
+        # 间隔设置
+        tk.Label(control_frame, text="间隔(秒):", bg="#f5f5f5", font=("Microsoft YaHei", 9)).pack(side=tk.LEFT, padx=(5, 2))
+        self.auto_interval_var = tk.IntVar(value=30)
+        interval_spin = tk.Spinbox(control_frame, from_=5, to=300, textvariable=self.auto_interval_var, width=5, font=("Microsoft YaHei", 9))
+        interval_spin.pack(side=tk.LEFT, padx=(0, 10))
+
+        # 中间：状态显示
+        self.auto_status_label = tk.Label(control_frame, text="就绪", bg="#f5f5f5", fg="#666666", font=("Microsoft YaHei", 9))
+        self.auto_status_label.pack(side=tk.LEFT, padx=10)
+
+        # 右侧：按钮
+        btn_frame = tk.Frame(control_frame, bg="#f5f5f5")
+        btn_frame.pack(side=tk.RIGHT, padx=(10, 0))
+
+        self.auto_start_btn = tk.Button(
+            btn_frame,
+            text="▶ 开始自动",
+            command=self.start_auto_chat_manual,
+            bg="#4CAF50",
+            fg="white",
+            font=("Microsoft YaHei", 9),
+            width=10
+        )
+        self.auto_start_btn.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.auto_stop_btn = tk.Button(
+            btn_frame,
+            text="■ 停止",
+            command=self.stop_auto_chat_manual,
+            bg="#f44336",
+            fg="white",
+            font=("Microsoft YaHei", 9),
+            width=8,
+            state=tk.DISABLED
+        )
+        self.auto_stop_btn.pack(side=tk.LEFT)
 
         # 底部输入区域
         self.input_frame = tk.Frame(self.root, height=60, pady=5)
@@ -164,16 +252,237 @@ class MentorChatGUI:
         threading.Thread(target=self.get_reply, args=(msg,), daemon=True).start()
 
     def get_reply(self, user_msg: str):
-        """获取导师回复（在后台线程）"""
+        """获取导师回复（在后台线程，支持流式）"""
         try:
-            reply = self.demo.chat(user_msg)
-            self.root.after(0, lambda: self.add_message("assistant", reply))
-            self.root.after(0, self.refresh_info)
+            # 流式回调函数
+            def stream_callback(chunk):
+                self.root.after(0, lambda c=chunk: self._append_to_last_message(c))
+
+            # 使用 APIClient 的流式功能
+            reply = self.demo.api_client.generate_reply(self.demo.vh, user_msg, stream_callback=stream_callback)
+
+            # 流式完成后刷新信息
+            if reply is not None:
+                # 非流式回退（应该不会发生）
+                self.root.after(0, lambda: self.add_message("assistant", reply.get("reply", "")))
+                self.root.after(0, self.refresh_info)
+            else:
+                # 流式完成，添加换行并刷新
+                self.root.after(0, lambda: self._finish_stream_message())
+                self.root.after(0, self.refresh_info)
         except Exception as e:
             self.root.after(0, lambda: self.add_system_message(f"错误: {e}"))
 
-    def refresh_display(self):
-        """刷新界面"""
+    def _append_to_last_message(self, text_chunk: str):
+        """向最后一个助手的消息追加文本（流式效果）"""
+        self.chat_display.config(state=tk.NORMAL)
+        # 移动到末尾
+        self.chat_display.see(tk.END)
+        # 插入文本块
+        self.chat_display.insert(tk.END, text_chunk, "assistant")
+        self.chat_display.see(tk.END)
+        self.chat_display.config(state=tk.DISABLED)
+
+    def _finish_stream_message(self):
+        """完成流式消息 - 添加换行"""
+        self.chat_display.config(state=tk.NORMAL)
+        self.chat_display.insert(tk.END, "\n\n")
+        self.chat_display.see(tk.END)
+        self.chat_display.config(state=tk.DISABLED)
+
+    def start_auto_chat_if_enabled(self):
+        """根据设置启动自动聊天（应用启动时）"""
+        s = gui_settings.load_settings()
+        if s.get("auto_chat_enabled", False):
+            rounds = s.get("auto_chat_rounds", 10)
+            interval = s.get("auto_chat_interval", 30)
+            # 更新界面控件
+            self.auto_rounds_var.set(rounds)
+            self.auto_interval_var.set(interval)
+            # 启动自动聊天
+            self._start_auto_chat_thread(rounds, interval)
+        else:
+            self.auto_status_label.config(text="就绪")
+
+    def start_auto_chat_manual(self):
+        """手动开启自动聊天（按钮点击）"""
+        rounds = self.auto_rounds_var.get()
+        interval = self.auto_interval_var.get()
+
+        if rounds <= 0:
+            messagebox.showwarning("参数错误", "轮数必须大于0")
+            return
+        if interval < 5:
+            messagebox.showwarning("参数错误", "间隔不能小于5秒")
+            return
+
+        # 停止之前的自动聊天（如果有）
+        self.stop_auto_chat()
+
+        # 启动新线程
+        self._start_auto_chat_thread(rounds, interval)
+        self.add_system_message(f"自动对话已手动开启（{rounds}轮，间隔{interval}秒）")
+
+        # 更新按钮状态
+        self.auto_start_btn.config(state=tk.DISABLED)
+        self.auto_stop_btn.config(state=tk.NORMAL)
+
+    def _start_auto_chat_thread(self, rounds: int, interval: int):
+        """启动自动聊天线程"""
+        self.auto_chat_remaining = rounds
+        self.auto_chat_stop.clear()
+        self.auto_chat_thread = threading.Thread(
+            target=self._auto_chat_worker,
+            args=(interval,),
+            daemon=True
+        )
+        self.auto_chat_thread.start()
+        self._update_auto_status()
+
+    def stop_auto_chat_manual(self):
+        """手动停止自动聊天"""
+        self.stop_auto_chat()
+        self.add_system_message("自动对话已停止")
+        self.auto_status_label.config(text="已停止")
+        self.auto_start_btn.config(state=tk.NORMAL)
+        self.auto_stop_btn.config(state=tk.DISABLED)
+
+    def stop_auto_chat(self):
+        """停止自动聊天（内部方法）"""
+        if self.auto_chat_thread and self.auto_chat_thread.is_alive():
+            self.auto_chat_stop.set()
+            self.auto_chat_thread.join(timeout=1)
+    def _auto_chat_worker(self, interval: int):
+        """自动聊天后台线程 - 模拟用户与导师的完整对话"""
+        import time
+        import random
+
+        # 模拟用户的话题（自动聊天的用户消息）
+        user_topics = [
+            "你好，最近怎么样？",
+            "在做什么呢？",
+            "你觉得我该怎么赚钱？",
+            "我最近有点困惑，该怎么办？",
+            "有什么建议可以给我吗？",
+            "我的工作不顺利，怎么办？",
+            "我想学点新技能，有什么推荐？",
+            "你觉得人生最重要的是什么？",
+            "如何提升自己？",
+            "可以陪我聊聊吗？",
+            "我对未来很迷茫",
+            "怎么才能成功？",
+            "你觉得我适合做什么？"
+        ]
+
+        while not self.auto_chat_stop.is_set() and self.auto_chat_remaining > 0:
+            # 更新状态：等待中
+            self.root.after(0, lambda r=self.auto_chat_remaining: self._update_auto_status(f"等待下一轮... 剩余{r}轮"))
+
+            time.sleep(interval)
+
+            if self.auto_chat_stop.is_set():
+                break
+
+            # 检查是否有导师
+            mentors = [vh for vh in self.demo.agent_manager.virtual_humans.values()
+                      if getattr(vh, 'is_mentor', False)]
+            if not mentors:
+                self.root.after(0, lambda: self.add_system_message("[自动] 没有可用的导师，自动对话停止"))
+                break
+
+            # 更新状态：正在对话
+            self.root.after(0, lambda r=self.auto_chat_remaining: self._update_auto_status(f"对话中... 剩余{r}轮"))
+
+            # 随机选择一位导师
+            mentor = random.choice(mentors)
+
+            # 自动聊一轮：模拟用户发送一条消息
+            user_msg = random.choice(user_topics)
+
+            # 显示用户消息（标记为自动）
+            self.root.after(0, lambda u=user_msg: self._show_auto_user_message(u))
+
+            # 延时一下，让界面响应
+            time.sleep(0.5)
+
+            # 调用 API 生成导师回复（流式）
+            try:
+                reply = self.demo.api_client.generate_reply(mentor, user_msg)
+                if reply:
+                    reply_text = reply.get("reply", "")
+                    # 在GUI线程中显示回复（流式效果）
+                    self.root.after(0, lambda r=reply_text, m=mentor: self._stream_assistant_message(r, m))
+            except Exception as e:
+                self.root.after(0, lambda e=e: self.add_system_message(f"[自动] 对话错误: {e}"))
+
+            self.auto_chat_remaining -= 1
+
+        # 结束
+        if self.auto_chat_stop.is_set():
+            self.root.after(0, lambda: self.auto_status_label.config(text="已停止"))
+        else:
+            self.root.after(0, lambda: self.auto_status_label.config(text="已完成"))
+            self.root.after(0, lambda: self._set_auto_buttons_state(True))
+
+    def _show_auto_user_message(self, message: str):
+        """显示自动聊天中的用户消息"""
+        self.chat_display.config(state=tk.NORMAL)
+        prefix = "[自动] 你: "
+        self.chat_display.insert(tk.END, prefix, "user")
+        self.chat_display.insert(tk.END, message + "\n\n")
+        self.chat_display.see(tk.END)
+        self.chat_display.config(state=tk.DISABLED)
+
+    def _stream_assistant_message(self, full_text: str, mentor):
+        """流式显示助手消息（自动聊天专用）- 使用 after 实现打字效果"""
+        self.chat_display.config(state=tk.NORMAL)
+        prefix = f"[自动] {mentor.name}: "
+        self.chat_display.insert(tk.END, prefix, "assistant")
+        self.chat_display.see(tk.END)
+        self.chat_display.config(state=tk.DISABLED)
+
+        index = 0
+        def stream_next():
+            nonlocal index
+            if index < len(full_text):
+                ch = full_text[index]
+                index += 1
+                self.chat_display.config(state=tk.NORMAL)
+                self.chat_display.insert(tk.END, ch, "assistant")
+                self.chat_display.see(tk.END)
+                self.chat_display.config(state=tk.DISABLED)
+                self.root.after(30, stream_next)
+            else:
+                self.chat_display.config(state=tk.NORMAL)
+                self.chat_display.insert(tk.END, "\n\n")
+                self.chat_display.see(tk.END)
+                self.chat_display.config(state=tk.DISABLED)
+
+        stream_next()
+
+    def _update_auto_status(self, status_text: str = None):
+        """更新自动聊天状态显示"""
+        if status_text:
+            self.auto_status_label.config(text=status_text)
+        else:
+            if self.auto_chat_remaining > 0:
+                self.auto_status_label.config(text=f"运行中... 剩余{self.auto_chat_remaining}轮")
+            else:
+                self.auto_status_label.config(text="已完成")
+
+    def _set_auto_buttons_state(self, start_enabled: bool):
+        """设置自动聊天按钮状态"""
+        self.auto_start_btn.config(state=tk.NORMAL if start_enabled else tk.DISABLED)
+        self.auto_stop_btn.config(state=tk.DISABLED if start_enabled else tk.NORMAL)
+
+    def stop_auto_chat(self):
+        """停止自动聊天"""
+        if self.auto_chat_thread and self.auto_chat_thread.is_alive():
+            self.auto_chat_stop.set()
+            self.auto_chat_thread.join(timeout=1)
+        # 重置按钮状态
+        self.root.after(0, lambda: self._set_auto_buttons_state(True))
+        self.root.after(0, lambda: self.auto_status_label.config(text="已停止"))
         self.refresh_info()
         # 可以加载历史消息（如果需要）
 
@@ -216,6 +525,11 @@ class MentorChatGUI:
         file_menu.add_command(label="保存数据", command=self.demo.agent_manager.save_all)
         file_menu.add_separator()
         file_menu.add_command(label="退出", command=self.root.quit)
+
+        # 设置菜单（新增）
+        settings_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="设置", menu=settings_menu)
+        settings_menu.add_command(label="API配置...", command=self.show_settings_dialog)
 
         # 导师菜单（核心）
         mentor_menu = Menu(menubar, tearoff=0)
@@ -270,9 +584,114 @@ class MentorChatGUI:
             ver = "1.0.3.2"
         messagebox.showinfo("关于", f"OpenSims - 导师对话模式\n版本: {ver}\n\n专注于导师引导对话")
 
+    def show_settings_dialog(self):
+        """显示设置对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("设置")
+        dialog.geometry("450x350")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        # 加载当前设置
+        current_settings = gui_settings.load_settings()
+
+        # 创建表单
+        form_frame = ttk.Frame(dialog, padding="20")
+        form_frame.pack(fill=tk.BOTH, expand=True)
+
+        # API Endpoint
+        ttk.Label(form_frame, text="API Endpoint:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        endpoint_var = tk.StringVar(value=current_settings.get("api_endpoint", ""))
+        endpoint_entry = ttk.Entry(form_frame, textvariable=endpoint_var, width=50)
+        endpoint_entry.grid(row=0, column=1, pady=5, padx=(10, 0))
+
+        # API Key
+        ttk.Label(form_frame, text="API Key:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        api_key_var = tk.StringVar(value=current_settings.get("api_key", ""))
+        api_key_entry = ttk.Entry(form_frame, textvariable=api_key_var, width=50, show="*")
+        api_key_entry.grid(row=1, column=1, pady=5, padx=(10, 0))
+
+        # Model
+        ttk.Label(form_frame, text="Model:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        model_var = tk.StringVar(value=current_settings.get("model", "step-3.5-flash"))
+        model_entry = ttk.Entry(form_frame, textvariable=model_var, width=50)
+        model_entry.grid(row=2, column=1, pady=5, padx=(10, 0))
+
+        # Separator
+        ttk.Separator(form_frame, orient=tk.HORIZONTAL).grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=15)
+
+        # Use Mock checkbox
+        use_mock_var = tk.BooleanVar(value=current_settings.get("use_mock", False))
+        mock_check = ttk.Checkbutton(form_frame, text="使用模拟模式 (Use Mock)", variable=use_mock_var)
+        mock_check.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=5)
+
+        # Auto Chat checkbox
+        auto_chat_var = tk.BooleanVar(value=current_settings.get("auto_chat_enabled", False))
+        auto_chat_check = ttk.Checkbutton(form_frame, text="开启自动对话 (Auto Chat)", variable=auto_chat_var)
+        auto_chat_check.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=5)
+
+        # Auto Chat Rounds
+        ttk.Label(form_frame, text="自动对话轮数:").grid(row=6, column=0, sticky=tk.W, pady=5)
+        rounds_var = tk.IntVar(value=current_settings.get("auto_chat_rounds", 10))
+        rounds_spinbox = ttk.Spinbox(form_frame, from_=1, to=100, textvariable=rounds_var, width=10)
+        rounds_spinbox.grid(row=6, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+
+        # Warning label
+        warning_label = ttk.Label(form_frame, text="注意：修改设置后需要重启应用以生效", foreground="orange")
+        warning_label.grid(row=7, column=0, columnspan=2, pady=20)
+
+        # Buttons
+        btn_frame = ttk.Frame(form_frame)
+        btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
+
+        def on_save():
+            new_settings = {
+                "api_endpoint": endpoint_var.get().strip(),
+                "api_key": api_key_var.get().strip(),
+                "model": model_var.get().strip(),
+                "use_mock": use_mock_var.get(),
+                "auto_chat_enabled": auto_chat_var.get(),
+                "auto_chat_rounds": rounds_var.get()
+            }
+            # 验证
+            if not new_settings["api_endpoint"]:
+                messagebox.showerror("错误", "API Endpoint 不能为空")
+                return
+            if not new_settings["model"]:
+                messagebox.showerror("错误", "Model 不能为空")
+                return
+            try:
+                rounds = int(new_settings["auto_chat_rounds"])
+                if rounds < 1:
+                    raise ValueError
+            except:
+                messagebox.showerror("错误", "自动对话轮数必须是正整数")
+                return
+
+            if gui_settings.save_settings(new_settings):
+                messagebox.showinfo("成功", "设置已保存！\n请重启应用以应用更改。")
+                dialog.destroy()
+            else:
+                messagebox.showerror("错误", "保存设置失败")
+
+        def on_cancel():
+            dialog.destroy()
+
+        ttk.Button(btn_frame, text="保存", command=on_save, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="取消", command=on_cancel, width=10).pack(side=tk.LEFT, padx=5)
+
     def run(self):
         """运行GUI"""
+        # 窗口关闭时清理
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
+
+    def on_closing(self):
+        """窗口关闭事件"""
+        self.stop_auto_chat()
+        self.root.quit()
+        self.root.destroy()
 
 
 if __name__ == "__main__":

@@ -121,7 +121,9 @@ def copy_additional_files():
         'config.py',
         'requirements.txt',
         'README.md',
-        'human_like_chat.py'
+        'human_like_chat.py',
+        'settings.json',
+        'settings.py'
     ]
 
     for f in files_to_copy:

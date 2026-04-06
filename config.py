@@ -1,13 +1,37 @@
 # OpenSims Demo Configuration
+import os
+import sys
 
-# API配置
-API_ENDPOINT = "https://api.yunjunet.cn/v1/chat/completions"  # OpenAI兼容端点
-API_KEY = ""  # 从环境变量读取：os.getenv("OPENSIMS_API_KEY")
+# 尝试从 settings.json 加载配置（优先于默认值）
+def _load_settings():
+    """动态加载 settings 模块（支持PyInstaller打包环境）"""
+    try:
+        # 方法1：直接导入（开发环境）
+        import settings
+        return settings.load_settings()
+    except ImportError:
+        try:
+            # 方法2：从当前目录导入（打包环境）
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) or '.')
+            import settings as _settings
+            return _settings.load_settings()
+        except Exception as e:
+            print(f"[Config] 无法加载settings: {e}")
+            return None
+
+_settings_data = _load_settings()
+if _settings_data:
+    API_ENDPOINT = _settings_data.get("api_endpoint", "https://api.yunjunet.cn/v1/chat/completions")
+    API_KEY = _settings_data.get("api_key", "")
+    API_MODEL = _settings_data.get("model", "step-3.5-flash")
+    USE_MOCK = _settings_data.get("use_mock", False)
+else:
+    API_ENDPOINT = "https://api.yunjunet.cn/v1/chat/completions"
+    API_KEY = ""
+    API_MODEL = "step-3.5-flash"
+    USE_MOCK = False
+
 API_TIMEOUT = 30  # 秒
-API_MODEL = "step-3.5-flash"  # 云君网络模型
-
-# 是否使用Mock模式（如果没有API，设为True）
-USE_MOCK = False  # 使用真实API（需要配置API_KEY）
 
 # 性格预设
 PERSONALITY_PRESETS = {
