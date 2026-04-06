@@ -1,6 +1,7 @@
 # OpenSims 核心依赖
 requests>=2.28.0
 pyinstaller>=5.0
+python-dotenv>=0.19.0  # 支持 .env 文件加载
 
 # Web API
 fastapi>=0.95.0

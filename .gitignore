@@ -71,4 +71,4 @@ ms-playwright/
 
 # Project specific
 agents/__pycache__/
-# 保留test_*.py文件用于版本控制
+# 保留test_*.py文件用于版本控制.env

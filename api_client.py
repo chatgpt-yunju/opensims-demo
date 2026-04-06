@@ -6,6 +6,13 @@ from typing import Dict
 from virtual_human import SimPerson
 from config import API_ENDPOINT, API_TIMEOUT, USE_MOCK, API_MODEL
 
+# 尝试加载 .env 文件（如果存在）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # 加载 .env 文件中的环境变量
+except ImportError:
+    pass  # dotenv 未安装，忽略（依赖 requirements.txt）
+
 class APIClient:
     """API客户端（支持OpenAI兼容格式和Mock降级）"""
 
