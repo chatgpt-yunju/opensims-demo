@@ -38,6 +38,9 @@ class MentorChatGUI:
         self.vh_monitor_window = None
         self.vh_monitor_text = None
 
+        # 创建菜单（必须在create_widgets之前）
+        self.create_menu()
+
         # 构建界面（必须先创建控件，setup_system会用到chat_display）
         self.create_widgets()
 
