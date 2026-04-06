@@ -26,6 +26,8 @@ class MentorChatGUI:
         self.root.title("OpenSims - 导师对话")
         self.root.geometry("700x500")
         self.root.resizable(True, True)
+        # 设置最小窗口尺寸，确保控件可见
+        self.root.minsize(600, 400)
 
         # 自动聊天控制
         self.auto_chat_thread = None
@@ -145,9 +147,9 @@ class MentorChatGUI:
         self.chat_display.tag_config("system", foreground="#9E9E9E", font=("Microsoft YaHei", 10, "italic"))
 
         # 自动聊天控制面板
-        self.auto_chat_frame = tk.Frame(self.root, bg="#f5f5f5", height=50)
+        self.auto_chat_frame = tk.Frame(self.root, bg="#f5f5f5", height=45)
         self.auto_chat_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=(0, 5))
-        self.auto_chat_frame.pack_propagate(False)
+        # 不禁止propagate，让布局自适应
 
         # 左侧：控制选项
         control_frame = tk.Frame(self.auto_chat_frame, bg="#f5f5f5")
@@ -555,6 +557,11 @@ class MentorChatGUI:
         menubar.add_cascade(label="设置", menu=settings_menu)
         settings_menu.add_command(label="API配置...", command=self.show_settings_dialog)
 
+        # 视图菜单（虚拟人互聊监控）
+        view_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="视图", menu=view_menu)
+        view_menu.add_command(label="虚拟人对话监控", command=self.create_vh_monitor_window)
+
         # 导师菜单（核心）
         mentor_menu = Menu(menubar, tearoff=0)
         menubar.add_cascade(label="导师", menu=mentor_menu)
@@ -567,11 +574,6 @@ class MentorChatGUI:
         help_menu = Menu(menubar, tearoff=0)
         menubar.add_cascade(label="帮助", menu=help_menu)
         help_menu.add_command(label="关于", command=self.show_about)
-
-        # 视图菜单（虚拟人互聊监控）
-        view_menu = Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="视图", menu=view_menu)
-        view_menu.add_command(label="虚拟人对话监控", command=self.create_vh_monitor_window)
 
     def switch_mentor(self):
         """切换导师对话框"""
