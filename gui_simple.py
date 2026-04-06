@@ -439,8 +439,14 @@ class MentorChatGUI:
 
     def _stream_assistant_message(self, full_text: str, mentor):
         """流式显示助手消息（自动聊天专用）- 使用 after 实现打字效果"""
+        # 防御：兼容 mentor 可能是字典的情况（从某些数据源加载）
+        if isinstance(mentor, dict):
+            mentor_name = mentor.get('name', '导师')
+        else:
+            mentor_name = getattr(mentor, 'name', '导师')
+
         self.chat_display.config(state=tk.NORMAL)
-        prefix = f"[自动] {mentor.name}: "
+        prefix = f"[自动] {mentor_name}: "
         self.chat_display.insert(tk.END, prefix, "assistant")
         self.chat_display.see(tk.END)
         self.chat_display.config(state=tk.DISABLED)

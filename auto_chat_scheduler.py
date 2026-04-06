@@ -78,6 +78,11 @@ class AutoChatScheduler:
 
     def _trigger_conversation(self, vh1, vh2, turns=3):
         """触发两个虚拟人之间的对话"""
+        # 防御：确保vh1和vh2是SimPerson对象（而非dict）
+        if not (hasattr(vh1, 'name') and hasattr(vh2, 'name')):
+            print(f"[AutoChat] 错误: 传入的参数不是虚拟人对象 (vh1 type={type(vh1)}, vh2 type={type(vh2)})")
+            return
+
         print(f"\n[AutoChat] {vh1.name} ↔ {vh2.name} 开始聊天...")
 
         # 轮流对话
