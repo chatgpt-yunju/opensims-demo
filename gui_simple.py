@@ -607,13 +607,36 @@ class MentorChatGUI:
         tk.Button(dialog, text="切换", command=on_select).pack(pady=10)
 
     def show_about(self):
-        """显示关于信息"""
+        """显示关于信息（包含路径）"""
         try:
             from build_info import __version__
             ver = __version__
         except:
             ver = "1.0.3.2"
-        messagebox.showinfo("关于", f"OpenSims - 导师对话模式\n版本: {ver}\n\n专注于导师引导对话")
+
+        # 获取程序路径
+        program_dir = os.path.dirname(os.path.abspath(sys.argv[0])) if sys.argv[0] else "Unknown"
+        settings_path = os.path.join(program_dir, "settings.json")
+        config_path = os.path.join(program_dir, "config.py")
+
+        about_text = f"""OpenSims - 导师对话模式
+版本: {ver}
+
+【路径信息】
+程序目录: {program_dir}
+配置文件: {config_path}
+用户设置: {settings_path}
+
+【功能】
+• 导师对话（流式输出）
+• 自动对话（可配置轮数/间隔）
+• 虚拟人互聊监控
+• Human-like Chat增强
+
+【技术支持】
+.github: chatgpt-yunju/opensims-demo"""
+
+        messagebox.showinfo("关于", about_text)
 
     def show_settings_dialog(self):
         """显示设置对话框"""
