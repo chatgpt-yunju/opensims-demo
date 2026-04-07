@@ -825,19 +825,32 @@ Note ID: {note_id}
             "relationship": 0
         }
 
-        # 加载导师系统属性
-        vh.is_mentor = data.get("is_mentor", False)
-        vh.mentor_type = data.get("mentor_type", "平衡引导者")
-        vh.relationship_with_player = data.get("relationship_with_player", 50)
-        vh.discovered_player_interests = data.get("discovered_player_interests", [])
+        # 先根据职业计算默认导师状态
+        vh._update_mentor_status_from_job()
+
+        # 再加载保存的导师系统属性（覆盖自动计算的默认值）
+        saved_is_mentor = data.get("is_mentor")
+        if saved_is_mentor is not None:
+            vh.is_mentor = saved_is_mentor
+        saved_mentor_type = data.get("mentor_type")
+        if saved_mentor_type is not None:
+            vh.mentor_type = saved_mentor_type
+        saved_rel = data.get("relationship_with_player")
+        if saved_rel is not None:
+            vh.relationship_with_player = saved_rel
+        saved_interests = data.get("discovered_player_interests")
+        if saved_interests is not None:
+            vh.discovered_player_interests = saved_interests
+
         if not hasattr(vh, 'mentor_trigger_count'):
             vh.mentor_trigger_count = 0
         # 初始化 multi_agent_system
         vh.multi_agent_system = None
         vh.use_multi_agent = True
 
-        # 如果职业是教师/贵人，自动标记为导师
-        vh._update_mentor_status_from_job()
+        # 根据最终的导师状态和类型，更新引导风格（确保与保存的mentor_type一致）
+        if vh.is_mentor:
+            vh.guidance_style = vh._determine_guidance_style()
 
         return vh
 

@@ -101,6 +101,8 @@ class MentorChatGUI:
                 vh.is_mentor = True
                 vh.mentor_type = vh._assign_mentor_type()
             self.demo.select_virtual_human(vh.id)
+            # 保存所有数据（持久化导师标志）
+            self.demo.agent_manager.save_all()
             dialog.destroy()
             self.refresh_info()
             self.add_system_message(f"导师 {vh.name} 已就位！开始对话吧～")
@@ -149,6 +151,8 @@ class MentorChatGUI:
             vh.mentor_type = vh._assign_mentor_type()
             # 设为当前活跃
             self.demo.select_virtual_human(vh.id)
+            # 保存所有数据（持久化导师标志）
+            self.demo.agent_manager.save_all()
             dialog.destroy()
             self.refresh_info()
             self.add_system_message(f"✅ 新导师 {vh.name} ({vh.mentor_type}) 已创建并就位！")
